@@ -148,22 +148,21 @@ def _case_insensitive_col(df: pd.DataFrame, name: str) -> Optional[str]:
 # Staff rank normalization
 # ---------------------------------------------------------------------------
 
-# Approved ArcGIS staffrank values (exact spelling and capitalization required).
+# Approved ArcGIS staffrank coded values — exact spelling, capitalization,
+# punctuation, and spacing required by the ArcGIS Special Event Solution.
 APPROVED_RANKS = [
-    "Police Officer",
+    "POLICE CHIEF",
+    "EXECUTIVE CHIEF",
+    "EXECUTIVE ASSISTANT POLICE CHIEF",
+    "ASSISTANT POLICE CHIEF",
+    "POLICE CAPTAIN",
+    "POLICE LIEUTENANT",
+    "POLICE SERGEANT",
     "Senior Police Officer",
-    "Mobility Service Officer",
-    "Sergeant",
-    "Lieutenant",
-    "Captain",
-    "DPS",
-    "Assistant Chief",
-    "Executive AC",
-    "Executive Chief",
-    "Chief of Police",
-    "Outside LEO",
-    "HPD Civilian",
-    "Cadet",
+    "POLICE OFFICER",
+    "POLICE OFFICER,PROBATIONARY",
+    "Civilian",
+    "OLEA",
 ]
 
 # Lookup: lowercase canonical form -> approved rank string
@@ -171,28 +170,70 @@ _RANK_CANONICAL = {r.lower(): r for r in APPROVED_RANKS}
 
 # Common alternate source values -> approved rank (lowercase keys)
 _RANK_ALIASES: dict = {
-    "po":                         "Police Officer",
-    "officer":                    "Police Officer",
-    "police ofc":                 "Police Officer",
-    "sr police officer":          "Senior Police Officer",
-    "senior officer":             "Senior Police Officer",
-    "mso":                        "Mobility Service Officer",
-    "mobility officer":           "Mobility Service Officer",
-    "sgt":                        "Sergeant",
-    "lt":                         "Lieutenant",
-    "capt":                       "Captain",
-    "asst chief":                 "Assistant Chief",
-    "assistant police chief":     "Assistant Chief",
-    "exec ac":                    "Executive AC",
-    "executive assistant chief":  "Executive AC",
-    "chief":                      "Chief of Police",
-    "civilian":                   "HPD Civilian",
+    # Police Chief
+    "chief of police":                      "POLICE CHIEF",
+    "police chief":                         "POLICE CHIEF",
+    "chief":                                "POLICE CHIEF",
+
+    # Executive Chief
+    "executive chief":                      "EXECUTIVE CHIEF",
+
+    # Executive Assistant Police Chief
+    "executive ac":                         "EXECUTIVE ASSISTANT POLICE CHIEF",
+    "executive assistant chief":            "EXECUTIVE ASSISTANT POLICE CHIEF",
+    "executive assistant police chief":     "EXECUTIVE ASSISTANT POLICE CHIEF",
+    "exec ac":                              "EXECUTIVE ASSISTANT POLICE CHIEF",
+
+    # Assistant Police Chief
+    "assistant chief":                      "ASSISTANT POLICE CHIEF",
+    "assistant police chief":               "ASSISTANT POLICE CHIEF",
+    "asst chief":                           "ASSISTANT POLICE CHIEF",
+
+    # Police Captain
+    "captain":                              "POLICE CAPTAIN",
+    "police captain":                       "POLICE CAPTAIN",
+    "capt":                                 "POLICE CAPTAIN",
+
+    # Police Lieutenant
+    "lieutenant":                           "POLICE LIEUTENANT",
+    "police lieutenant":                    "POLICE LIEUTENANT",
+    "lt":                                   "POLICE LIEUTENANT",
+
+    # Police Sergeant
+    "sergeant":                             "POLICE SERGEANT",
+    "police sergeant":                      "POLICE SERGEANT",
+    "sgt":                                  "POLICE SERGEANT",
+
+    # Senior Police Officer
+    "senior police officer":                "Senior Police Officer",
+    "sr police officer":                    "Senior Police Officer",
+    "senior officer":                       "Senior Police Officer",
+
+    # Police Officer
+    "police officer":                       "POLICE OFFICER",
+    "officer":                              "POLICE OFFICER",
+    "po":                                   "POLICE OFFICER",
+    "police ofc":                           "POLICE OFFICER",
+
+    # Police Officer Probationary
+    "police officer probationary":          "POLICE OFFICER,PROBATIONARY",
+    "police officer, probationary":         "POLICE OFFICER,PROBATIONARY",
+    "probationary police officer":          "POLICE OFFICER,PROBATIONARY",
+    "po probationary":                      "POLICE OFFICER,PROBATIONARY",
+
+    # Civilian
+    "civilian":                             "Civilian",
+    "hpd civilian":                         "Civilian",
+
+    # OLEA
+    "outside leo":                          "OLEA",
+    "olea":                                 "OLEA",
 }
 
 
 def normalize_staff_rank(value: str) -> Tuple[str, bool]:
     """
-    Normalize a source rank value to the approved ArcGIS staffrank.
+    Normalize a source rank value to the approved ArcGIS staffrank coded value.
 
     Returns (normalized_rank, matched) where matched=False means the value
     was not found in the approved list or aliases — caller should warn.
@@ -204,13 +245,13 @@ def normalize_staff_rank(value: str) -> Tuple[str, bool]:
 
     key = cleaned.lower()
 
-    # Direct canonical match (case-insensitive)
-    if key in _RANK_CANONICAL:
-        return _RANK_CANONICAL[key], True
-
-    # Alias match
+    # Alias match first (covers both alternates and canonical forms)
     if key in _RANK_ALIASES:
         return _RANK_ALIASES[key], True
+
+    # Direct canonical match (case-insensitive fallback)
+    if key in _RANK_CANONICAL:
+        return _RANK_CANONICAL[key], True
 
     # No match — return cleaned original so row is not dropped
     return cleaned, False
