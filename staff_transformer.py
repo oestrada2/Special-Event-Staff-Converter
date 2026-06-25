@@ -166,8 +166,19 @@ def load_source_file(file_obj) -> Tuple[pd.DataFrame, str]:
     ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
 
     if ext == "csv":
-        # Read everything as str first, then we'll selectively convert
-        df = pd.read_csv(file_obj, dtype=str, keep_default_na=False)
+        # Try normal read first (works for clean files without title rows).
+        # Fall back to header=None when title rows cause column-count mismatch errors.
+        try:
+            df = pd.read_csv(file_obj, dtype=str, keep_default_na=False)
+        except Exception:
+            file_obj.seek(0)
+            df = pd.read_csv(
+                file_obj,
+                dtype=str,
+                keep_default_na=False,
+                header=None,
+                on_bad_lines="skip",
+            )
     elif ext in ("xlsx", "xls"):
         df = pd.read_excel(file_obj, dtype=str, keep_default_na=False)
     else:
