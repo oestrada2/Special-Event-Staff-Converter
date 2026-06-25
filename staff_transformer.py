@@ -228,7 +228,7 @@ def find_current_staffing_header_row(raw_df: pd.DataFrame) -> Optional[int]:
 
 
 def reload_staffing_with_real_header(file_obj, header_row_index: int) -> pd.DataFrame:
-    """Re-read the CSV using the detected header row."""
+    """Re-read the CSV using the detected header row (file-row index, 0-based)."""
     file_obj.seek(0)
     df = pd.read_csv(
         file_obj,
@@ -237,6 +237,18 @@ def reload_staffing_with_real_header(file_obj, header_row_index: int) -> pd.Data
         header=header_row_index,
     )
     return df
+
+
+def reparse_staffing_from_raw(raw_df: pd.DataFrame, header_row_idx: int) -> pd.DataFrame:
+    """
+    Reinterpret an already-loaded raw_df using row `header_row_idx` as the header.
+    Avoids file re-reads and off-by-one issues with pandas header= parameter.
+    """
+    new_cols = [str(v).strip() for v in raw_df.iloc[header_row_idx].tolist()]
+    data = raw_df.iloc[header_row_idx + 1:].copy()
+    data.columns = new_cols
+    data = data.reset_index(drop=True)
+    return data
 
 
 # ---------------------------------------------------------------------------

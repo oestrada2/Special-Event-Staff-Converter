@@ -15,7 +15,7 @@ from staff_transformer import (
     load_source_file,
     detect_source_format,
     find_current_staffing_header_row,
-    reload_staffing_with_real_header,
+    reparse_staffing_from_raw,
     transform_special_event_workup,
     transform_current_staffing_report,
     validate_output,
@@ -135,12 +135,11 @@ _header_row_used = None
 
 if fmt == "unknown":
     # Columns are title-row garbage (Textbox23, Unnamed:N, etc.).
-    # Scan row VALUES for the real staffing header row.
+    # Scan row VALUES for the real staffing header row, then reinterpret
+    # raw_df directly — no file re-read, no off-by-one with pandas header=.
     header_row = find_current_staffing_header_row(raw_df)
     if header_row is not None:
-        buf = _make_buf()
-        buf.name = file_name
-        source_df = reload_staffing_with_real_header(buf, header_row)
+        source_df = reparse_staffing_from_raw(raw_df, header_row)
         fmt = detect_source_format(source_df)
         _header_row_used = header_row
         if fmt != "unknown":
@@ -178,9 +177,7 @@ if fmt == "staffing" and _header_row_used is None:
         st.warning(
             f"Report title rows detected. Real header at row {header_row + 1}."
         )
-        buf = _make_buf()
-        buf.name = file_name
-        source_df = reload_staffing_with_real_header(buf, header_row)
+        source_df = reparse_staffing_from_raw(raw_df, header_row)
         st.subheader("Re-parsed Data Preview")
         st.dataframe(source_df.head(20), use_container_width=True)
         st.caption(f"Re-parsed: {len(source_df)} rows, {len(source_df.columns)} columns.")
