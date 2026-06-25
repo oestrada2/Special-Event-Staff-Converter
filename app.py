@@ -117,10 +117,30 @@ st.dataframe(raw_df.head(20), use_container_width=True)
 st.caption(f"Loaded {len(raw_df)} rows, {len(raw_df.columns)} columns.")
 
 # ---------------------------------------------------------------------------
-# Detect format
+# Detect format — with fallback header scan for CurrentStaffingReport
 # ---------------------------------------------------------------------------
 
 fmt = detect_source_format(raw_df)
+source_df = raw_df.copy()
+_header_already_found = False
+
+# If columns are unrecognized (report has title rows), scan row VALUES for
+# the real header before giving up on format detection.
+if fmt == "unknown":
+    header_row = find_current_staffing_header_row(raw_df)
+    if header_row is not None:
+        uploaded_file.seek(0)
+        source_df = reload_staffing_with_real_header(uploaded_file, header_row)
+        fmt = detect_source_format(source_df)
+        _header_already_found = True
+        if fmt != "unknown":
+            st.warning(
+                f"Report title rows detected above real header (row {header_row + 1}). "
+                f"Re-read with correct header."
+            )
+            st.subheader("Re-parsed Data Preview (after header detection)")
+            st.dataframe(source_df.head(20), use_container_width=True)
+            st.caption(f"Re-parsed: {len(source_df)} rows, {len(source_df.columns)} columns.")
 
 fmt_labels = {
     "workup":   "SpecialEventWorkupforGIS.csv",
@@ -131,21 +151,19 @@ fmt_label = fmt_labels.get(fmt, "Unknown format")
 
 if fmt == "unknown":
     st.error(
-        f"Could not identify the source format. "
-        f"Expected columns for SpecialEventWorkupforGIS.csv or "
-        f"CurrentStaffingReport.csv were not found."
+        "Could not identify the source format. "
+        "Expected columns for SpecialEventWorkupforGIS.csv or "
+        "CurrentStaffingReport.csv were not found."
     )
     st.stop()
 
 st.info(f"Detected source format: **{fmt_label}**")
 
 # ---------------------------------------------------------------------------
-# Handle CurrentStaffingReport header detection
+# Handle CurrentStaffingReport header detection (if not already done above)
 # ---------------------------------------------------------------------------
 
-source_df = raw_df.copy()
-
-if fmt == "staffing":
+if fmt == "staffing" and not _header_already_found:
     header_row = find_current_staffing_header_row(raw_df)
     if header_row is not None and header_row > 0:
         st.warning(
