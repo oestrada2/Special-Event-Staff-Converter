@@ -20,6 +20,7 @@ from staff_transformer import (
     transform_current_staffing_report,
     validate_output,
     write_to_template,
+    STAFFING_HEADER_IDENTIFIERS,
 )
 
 # ---------------------------------------------------------------------------
@@ -98,13 +99,21 @@ if not uploaded_file:
     st.stop()
 
 # ---------------------------------------------------------------------------
-# Load file
+# Load file — buffer bytes so we can re-read without seek() issues
 # ---------------------------------------------------------------------------
 
 st.divider()
 
+file_bytes = uploaded_file.read()
+file_name  = uploaded_file.name
+
+def _make_buf():
+    buf = io.BytesIO(file_bytes)
+    buf.name = file_name  # load_source_file reads .name for extension detection
+    return buf
+
 try:
-    raw_df, ext = load_source_file(uploaded_file)
+    raw_df, ext = load_source_file(_make_buf())
 except ValueError as e:
     st.error(str(e))
     st.stop()
@@ -117,28 +126,28 @@ st.dataframe(raw_df.head(20), use_container_width=True)
 st.caption(f"Loaded {len(raw_df)} rows, {len(raw_df.columns)} columns.")
 
 # ---------------------------------------------------------------------------
-# Detect format — with fallback header scan for CurrentStaffingReport
+# Detect format — scan column names first, then row values if needed
 # ---------------------------------------------------------------------------
 
 fmt = detect_source_format(raw_df)
 source_df = raw_df.copy()
-_header_already_found = False
+_header_row_used = None
 
-# If columns are unrecognized (report has title rows), scan row VALUES for
-# the real header before giving up on format detection.
 if fmt == "unknown":
+    # Columns are title-row garbage (Textbox23, Unnamed:N, etc.).
+    # Scan row VALUES for the real staffing header row.
     header_row = find_current_staffing_header_row(raw_df)
     if header_row is not None:
-        uploaded_file.seek(0)
-        source_df = reload_staffing_with_real_header(uploaded_file, header_row)
+        buf = _make_buf()
+        buf.name = file_name
+        source_df = reload_staffing_with_real_header(buf, header_row)
         fmt = detect_source_format(source_df)
-        _header_already_found = True
+        _header_row_used = header_row
         if fmt != "unknown":
             st.warning(
-                f"Report title rows detected above real header (row {header_row + 1}). "
-                f"Re-read with correct header."
+                f"Report title rows stripped. Real header found at row {header_row + 1}."
             )
-            st.subheader("Re-parsed Data Preview (after header detection)")
+            st.subheader("Re-parsed Data Preview")
             st.dataframe(source_df.head(20), use_container_width=True)
             st.caption(f"Re-parsed: {len(source_df)} rows, {len(source_df.columns)} columns.")
 
@@ -160,19 +169,19 @@ if fmt == "unknown":
 st.info(f"Detected source format: **{fmt_label}**")
 
 # ---------------------------------------------------------------------------
-# Handle CurrentStaffingReport header detection (if not already done above)
+# CurrentStaffingReport: strip title rows if not already done above
 # ---------------------------------------------------------------------------
 
-if fmt == "staffing" and not _header_already_found:
+if fmt == "staffing" and _header_row_used is None:
     header_row = find_current_staffing_header_row(raw_df)
     if header_row is not None and header_row > 0:
         st.warning(
-            f"Report title rows detected. Real header found at row {header_row + 1}. "
-            f"Re-reading with correct header."
+            f"Report title rows detected. Real header at row {header_row + 1}."
         )
-        uploaded_file.seek(0)
-        source_df = reload_staffing_with_real_header(uploaded_file, header_row)
-        st.subheader("Re-parsed Data Preview (after header detection)")
+        buf = _make_buf()
+        buf.name = file_name
+        source_df = reload_staffing_with_real_header(buf, header_row)
+        st.subheader("Re-parsed Data Preview")
         st.dataframe(source_df.head(20), use_container_width=True)
         st.caption(f"Re-parsed: {len(source_df)} rows, {len(source_df.columns)} columns.")
 
