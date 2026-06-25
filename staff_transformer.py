@@ -504,9 +504,7 @@ def transform_special_event_workup(
 
         out["staffduty"]  = _get(df, row, "StaffDuty")
 
-        # staffagency default
-        sa_val = _get(df, row, "StaffAgency")
-        out["staffagency"] = sa_val if sa_val else default_staff_agency
+        out["staffagency"] = "HPD"
 
         # datetime fields
         for arcgis_col, src_col in WORKUP_DATETIME_FIELDS.items():
@@ -592,7 +590,7 @@ def transform_current_staffing_report(
         out["staffpay"]   = ""
         out["staffstatus"]= default_staff_status
         out["staffduty"]  = _get(df, row, "Division")
-        out["staffagency"]= default_staff_agency
+        out["staffagency"] = "HPD"
 
         # unitshift: derive from shift/shiftStart/ShiftEnd
         shift_label = _get(df, row, "shift")
