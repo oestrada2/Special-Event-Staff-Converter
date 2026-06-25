@@ -89,7 +89,7 @@ STAFFING_COLUMN_MAP = {
     "unitduties":     None,            # always blank
     "payrollnum":     "EmpID",
     "staffrank":      "RankDescription",
-    "staffname":      None,            # derived: LastName, FirstName MiddleName
+    "staffname":      None,            # derived: LastName, FirstName
     "staffphone":     "CellPhone",
     "staffemail":     None,            # always blank
     "staffskills":    None,            # always blank
@@ -420,15 +420,18 @@ def transform_current_staffing_report(
         out["payrollnum"]= emp_id
         out["staffrank"] = _get(df, row, "RankDescription")
 
-        # staffname: LastName, FirstName MiddleName
-        last   = _get(df, row, "LastName")
-        first  = _get(df, row, "FirstName")
-        middle = _get(df, row, "MiddleName")
-        if middle:
-            full = f"{last}, {first} {middle}"
-        else:
+        # staffname: LastName, FirstName
+        last  = _get(df, row, "LastName")
+        first = _get(df, row, "FirstName")
+        if last and first:
             full = f"{last}, {first}"
-        out["staffname"] = full.strip().strip(",").strip()
+        elif last:
+            full = last
+        elif first:
+            full = first
+        else:
+            full = ""
+        out["staffname"] = full
 
         out["staffphone"] = _get(df, row, "CellPhone")
         out["staffemail"] = ""
