@@ -114,11 +114,13 @@ def process_file(uploaded_file):
         buf.name = file_name
         return buf
 
+    raw_df_for_preview = None  # captured for display by caller
+
     # Load
     try:
         raw_df, ext = load_source_file(_make_buf())
     except Exception as e:
-        return None, [f"**{file_name}**: Could not read file — {e}"], "error"
+        return None, None, [f"**{file_name}**: Could not read file — {e}"], "error"
 
     # Detect format
     fmt = detect_source_format(raw_df)
@@ -133,7 +135,7 @@ def process_file(uploaded_file):
             _header_row_used = header_row
 
     if fmt == "unknown":
-        return None, [
+        return None, None, [
             f"**{file_name}**: Could not identify source format. "
             f"Expected columns for SpecialEventWorkupforGIS or CurrentStaffingReport were not found."
         ], "unknown"
@@ -187,13 +189,13 @@ def process_file(uploaded_file):
                 default_event_status=default_event_status,
             )
     except Exception as e:
-        return None, [f"**{file_name}**: Transformation failed — {e}\n{traceback.format_exc()}"], fmt_label
+        return None, source_df, [f"**{file_name}**: Transformation failed — {e}\n{traceback.format_exc()}"], fmt_label
 
     # Prefix file warnings with filename
     prefixed_warnings = [f"**{file_name}**: {w}" for w in transform_warnings]
     all_warnings = col_warnings + prefixed_warnings
 
-    return output_df, all_warnings, fmt_label
+    return output_df, source_df, all_warnings, fmt_label
 
 
 # ---------------------------------------------------------------------------
@@ -207,14 +209,20 @@ all_warnings   = []
 file_summaries = []
 
 for uf in uploaded_files:
-    output_df, warnings, fmt_label = process_file(uf)
+    output_df, source_df, warnings, fmt_label = process_file(uf)
     all_warnings.extend(warnings)
+
+    row_count = len(output_df) if output_df is not None and not output_df.empty else 0
+    file_summaries.append((uf.name, fmt_label, row_count))
+
+    # Show raw input preview per file inside an expander
+    if source_df is not None:
+        with st.expander(f"Raw Input Preview — {uf.name} ({row_count} rows)", expanded=False):
+            st.dataframe(source_df.head(20), use_container_width=True)
+            st.caption(f"{len(source_df)} rows, {len(source_df.columns)} columns")
 
     if output_df is not None and not output_df.empty:
         all_output_dfs.append(output_df)
-        file_summaries.append((uf.name, fmt_label, len(output_df)))
-    else:
-        file_summaries.append((uf.name, fmt_label, 0))
 
 # ---------------------------------------------------------------------------
 # Per-file summary table
