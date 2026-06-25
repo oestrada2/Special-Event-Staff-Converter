@@ -1,6 +1,8 @@
 """
 app.py
 Streamlit UI for the ArcGIS Special Event Staff Converter.
+Supports multiple file uploads — each file processed individually,
+all rows combined into one output workbook.
 """
 
 import os
@@ -44,8 +46,8 @@ st.set_page_config(
 
 st.title("ArcGIS Special Event Staff Converter")
 st.caption(
-    "Upload a staffing CSV, preview the conversion, and download the "
-    "completed ArcGIS batch upload workbook."
+    "Upload one or more staffing CSVs, preview the conversion, and download "
+    "the completed ArcGIS batch upload workbook."
 )
 
 # ---------------------------------------------------------------------------
@@ -85,166 +87,164 @@ else:
     st.sidebar.error("Template NOT found — place file in `templates/` folder")
 
 # ---------------------------------------------------------------------------
-# File upload
+# File upload — multiple files allowed
 # ---------------------------------------------------------------------------
 
-uploaded_file = st.file_uploader(
-    "Upload staffing file",
+uploaded_files = st.file_uploader(
+    "Upload staffing files",
     type=["csv", "xlsx", "xls"],
-    help="Accepts CurrentStaffingReport.csv or SpecialEventWorkupforGIS.csv",
+    accept_multiple_files=True,
+    help="Upload one or more CurrentStaffingReport or SpecialEventWorkupforGIS files.",
 )
 
-if not uploaded_file:
-    st.info("Drag and drop a CSV or XLSX file above to begin.")
+if not uploaded_files:
+    st.info("Drag and drop one or more CSV or XLSX files above to begin.")
     st.stop()
 
 # ---------------------------------------------------------------------------
-# Load file — buffer bytes so we can re-read without seek() issues
+# Helper: process one uploaded file -> (output_df, all_warnings, fmt_label)
+# ---------------------------------------------------------------------------
+
+def process_file(uploaded_file):
+    file_bytes = uploaded_file.read()
+    file_name  = uploaded_file.name
+
+    def _make_buf():
+        buf = io.BytesIO(file_bytes)
+        buf.name = file_name
+        return buf
+
+    # Load
+    try:
+        raw_df, ext = load_source_file(_make_buf())
+    except Exception as e:
+        return None, [f"**{file_name}**: Could not read file — {e}"], "error"
+
+    # Detect format
+    fmt = detect_source_format(raw_df)
+    source_df = raw_df.copy()
+    _header_row_used = None
+
+    if fmt == "unknown":
+        header_row = find_current_staffing_header_row(raw_df)
+        if header_row is not None:
+            source_df = reparse_staffing_from_raw(raw_df, header_row)
+            fmt = detect_source_format(source_df)
+            _header_row_used = header_row
+
+    if fmt == "unknown":
+        return None, [
+            f"**{file_name}**: Could not identify source format. "
+            f"Expected columns for SpecialEventWorkupforGIS or CurrentStaffingReport were not found."
+        ], "unknown"
+
+    fmt_labels = {
+        "workup":   "SpecialEventWorkupforGIS.csv",
+        "staffing": "CurrentStaffingReport.csv",
+    }
+    fmt_label = fmt_labels.get(fmt, fmt)
+
+    # Strip title rows for staffing format if not already done
+    if fmt == "staffing" and _header_row_used is None:
+        header_row = find_current_staffing_header_row(raw_df)
+        if header_row is not None and header_row > 0:
+            source_df = reparse_staffing_from_raw(raw_df, header_row)
+
+    # Column warnings
+    col_warnings = []
+    if fmt == "workup":
+        expected = {"UnitId", "StaffRank", "StaffName", "ShiftStart", "ShiftEnd"}
+        actual_lower = {c.strip().lower() for c in source_df.columns}
+        missing = [c for c in expected if c.lower() not in actual_lower]
+        if missing:
+            col_warnings.append(f"**{file_name}**: Missing source columns: {missing}")
+    elif fmt == "staffing":
+        expected = {"EmpID", "RankDescription", "LastName", "FirstName",
+                    "RadioCallNumber", "UnitNo", "shiftStart", "ShiftEnd"}
+        actual_lower = {c.strip().lower() for c in source_df.columns}
+        missing = [c for c in expected if c.lower() not in actual_lower]
+        if missing:
+            col_warnings.append(f"**{file_name}**: Missing source columns: {missing}")
+
+    # Transform
+    try:
+        if fmt == "workup":
+            output_df, transform_warnings = transform_special_event_workup(
+                source_df,
+                offset_hours=float(offset_hours),
+                default_unit_type=default_unit_type_workup,
+                default_staff_status=default_staff_status,
+                default_staff_agency=default_staff_agency,
+                default_event_status=default_event_status,
+            )
+        else:
+            output_df, transform_warnings = transform_current_staffing_report(
+                source_df,
+                offset_hours=float(offset_hours),
+                default_unit_type=default_unit_type_staffing,
+                default_staff_status=default_staff_status,
+                default_staff_agency=default_staff_agency,
+                default_event_status=default_event_status,
+            )
+    except Exception as e:
+        return None, [f"**{file_name}**: Transformation failed — {e}\n{traceback.format_exc()}"], fmt_label
+
+    # Prefix file warnings with filename
+    prefixed_warnings = [f"**{file_name}**: {w}" for w in transform_warnings]
+    all_warnings = col_warnings + prefixed_warnings
+
+    return output_df, all_warnings, fmt_label
+
+
+# ---------------------------------------------------------------------------
+# Process all uploaded files
 # ---------------------------------------------------------------------------
 
 st.divider()
 
-file_bytes = uploaded_file.read()
-file_name  = uploaded_file.name
+all_output_dfs = []
+all_warnings   = []
+file_summaries = []
 
-def _make_buf():
-    buf = io.BytesIO(file_bytes)
-    buf.name = file_name  # load_source_file reads .name for extension detection
-    return buf
+for uf in uploaded_files:
+    output_df, warnings, fmt_label = process_file(uf)
+    all_warnings.extend(warnings)
 
-try:
-    raw_df, ext = load_source_file(_make_buf())
-except ValueError as e:
-    st.error(str(e))
-    st.stop()
-except Exception as e:
-    st.error(f"Error reading file: {e}")
-    st.stop()
-
-st.subheader("Raw Upload Preview")
-st.dataframe(raw_df.head(20), use_container_width=True)
-st.caption(f"Loaded {len(raw_df)} rows, {len(raw_df.columns)} columns.")
+    if output_df is not None and not output_df.empty:
+        all_output_dfs.append(output_df)
+        file_summaries.append((uf.name, fmt_label, len(output_df)))
+    else:
+        file_summaries.append((uf.name, fmt_label, 0))
 
 # ---------------------------------------------------------------------------
-# Detect format — scan column names first, then row values if needed
+# Per-file summary table
 # ---------------------------------------------------------------------------
 
-fmt = detect_source_format(raw_df)
-source_df = raw_df.copy()
-_header_row_used = None
+st.subheader(f"Files Processed: {len(uploaded_files)}")
 
-if fmt == "unknown":
-    # Columns are title-row garbage (Textbox23, Unnamed:N, etc.).
-    # Scan row VALUES for the real staffing header row, then reinterpret
-    # raw_df directly — no file re-read, no off-by-one with pandas header=.
-    header_row = find_current_staffing_header_row(raw_df)
-    if header_row is not None:
-        source_df = reparse_staffing_from_raw(raw_df, header_row)
-        fmt = detect_source_format(source_df)
-        _header_row_used = header_row
-        if fmt != "unknown":
-            st.warning(
-                f"Report title rows stripped. Real header found at row {header_row + 1}."
-            )
-            st.subheader("Re-parsed Data Preview")
-            st.dataframe(source_df.head(20), use_container_width=True)
-            st.caption(f"Re-parsed: {len(source_df)} rows, {len(source_df.columns)} columns.")
-
-fmt_labels = {
-    "workup":   "SpecialEventWorkupforGIS.csv",
-    "staffing": "CurrentStaffingReport.csv",
-    "unknown":  "Unknown format",
+summary_data = {
+    "File": [s[0] for s in file_summaries],
+    "Detected Format": [s[1] for s in file_summaries],
+    "Rows": [s[2] for s in file_summaries],
 }
-fmt_label = fmt_labels.get(fmt, "Unknown format")
+st.dataframe(pd.DataFrame(summary_data), use_container_width=True, hide_index=True)
 
-if fmt == "unknown":
-    st.error(
-        "Could not identify the source format. "
-        "Expected columns for SpecialEventWorkupforGIS.csv or "
-        "CurrentStaffingReport.csv were not found."
-    )
+# ---------------------------------------------------------------------------
+# Combine all output rows
+# ---------------------------------------------------------------------------
+
+if not all_output_dfs:
+    st.error("No rows produced from any uploaded file.")
     st.stop()
 
-st.info(f"Detected source format: **{fmt_label}**")
-
-# ---------------------------------------------------------------------------
-# CurrentStaffingReport: strip title rows if not already done above
-# ---------------------------------------------------------------------------
-
-if fmt == "staffing" and _header_row_used is None:
-    header_row = find_current_staffing_header_row(raw_df)
-    if header_row is not None and header_row > 0:
-        st.warning(
-            f"Report title rows detected. Real header at row {header_row + 1}."
-        )
-        source_df = reparse_staffing_from_raw(raw_df, header_row)
-        st.subheader("Re-parsed Data Preview")
-        st.dataframe(source_df.head(20), use_container_width=True)
-        st.caption(f"Re-parsed: {len(source_df)} rows, {len(source_df.columns)} columns.")
-
-# ---------------------------------------------------------------------------
-# Check for missing expected columns
-# ---------------------------------------------------------------------------
-
-col_warnings = []
-
-if fmt == "workup":
-    expected = {
-        "UnitId", "StaffRank", "StaffName", "ShiftStart", "ShiftEnd"
-    }
-    actual_lower = {c.strip().lower() for c in source_df.columns}
-    missing = [c for c in expected if c.lower() not in actual_lower]
-    if missing:
-        col_warnings.append(f"Missing expected source columns: {missing}")
-
-elif fmt == "staffing":
-    expected = {
-        "EmpID", "RankDescription", "LastName", "FirstName",
-        "RadioCallNumber", "UnitNo", "shiftStart", "ShiftEnd",
-    }
-    actual_lower = {c.strip().lower() for c in source_df.columns}
-    missing = [c for c in expected if c.lower() not in actual_lower]
-    if missing:
-        col_warnings.append(f"Missing expected source columns: {missing}")
-
-# ---------------------------------------------------------------------------
-# Transform
-# ---------------------------------------------------------------------------
-
-transform_warnings = []
-output_df = pd.DataFrame()
-
-try:
-    if fmt == "workup":
-        output_df, transform_warnings = transform_special_event_workup(
-            source_df,
-            offset_hours=float(offset_hours),
-            default_unit_type=default_unit_type_workup,
-            default_staff_status=default_staff_status,
-            default_staff_agency=default_staff_agency,
-            default_event_status=default_event_status,
-        )
-    elif fmt == "staffing":
-        output_df, transform_warnings = transform_current_staffing_report(
-            source_df,
-            offset_hours=float(offset_hours),
-            default_unit_type=default_unit_type_staffing,
-            default_staff_status=default_staff_status,
-            default_staff_agency=default_staff_agency,
-            default_event_status=default_event_status,
-        )
-except Exception as e:
-    st.error(f"Transformation failed: {e}")
-    with st.expander("Traceback"):
-        st.code(traceback.format_exc())
-    st.stop()
+combined_df = pd.concat(all_output_dfs, ignore_index=True)
 
 # ---------------------------------------------------------------------------
 # Validation summary
 # ---------------------------------------------------------------------------
 
-val_warnings = validate_output(output_df)
-all_warnings = col_warnings + transform_warnings + val_warnings
+val_warnings = validate_output(combined_df)
+all_warnings += val_warnings
 
 st.divider()
 st.subheader("Validation Summary")
@@ -256,18 +256,13 @@ else:
         st.warning(w)
 
 # ---------------------------------------------------------------------------
-# Output preview
+# Combined output preview
 # ---------------------------------------------------------------------------
 
 st.divider()
-st.subheader("Transformed Output Preview")
+st.subheader("Transformed Output Preview (All Files Combined)")
 
-if output_df.empty:
-    st.error("Transformed output is empty — nothing to write.")
-    st.stop()
-
-# Display datetime columns as strings for preview readability
-preview_df = output_df.copy()
+preview_df = combined_df.copy()
 for col in ("unitshiftstart", "unitshiftend"):
     if col in preview_df.columns:
         preview_df[col] = preview_df[col].apply(
@@ -275,7 +270,7 @@ for col in ("unitshiftstart", "unitshiftend"):
         )
 
 st.dataframe(preview_df, use_container_width=True)
-st.caption(f"{len(output_df)} rows ready for upload.")
+st.caption(f"{len(combined_df)} total rows from {len(all_output_dfs)} file(s) ready for upload.")
 
 # ---------------------------------------------------------------------------
 # Write to template and provide download
@@ -291,7 +286,7 @@ if not template_exists:
     st.stop()
 
 try:
-    workbook_bytes = write_to_template(output_df, TEMPLATE_PATH)
+    workbook_bytes = write_to_template(combined_df, TEMPLATE_PATH)
 except Exception as e:
     st.error(f"Failed to write template: {e}")
     with st.expander("Traceback"):
