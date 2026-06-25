@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+.venv
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.DS_Store
+Thumbs.db
+*.csv
+*.xlsx
+!templates/Sample_Batch_Load_Event_Staff_Template.xlsx
+.streamlit/secrets.toml
