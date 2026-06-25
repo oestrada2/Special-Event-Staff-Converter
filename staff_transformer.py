@@ -144,6 +144,78 @@ def _case_insensitive_col(df: pd.DataFrame, name: str) -> Optional[str]:
     return None
 
 
+# ---------------------------------------------------------------------------
+# Staff rank normalization
+# ---------------------------------------------------------------------------
+
+# Approved ArcGIS staffrank values (exact spelling and capitalization required).
+APPROVED_RANKS = [
+    "Police Officer",
+    "Senior Police Officer",
+    "Mobility Service Officer",
+    "Sergeant",
+    "Lieutenant",
+    "Captain",
+    "DPS",
+    "Assistant Chief",
+    "Executive AC",
+    "Executive Chief",
+    "Chief of Police",
+    "Outside LEO",
+    "HPD Civilian",
+    "Cadet",
+]
+
+# Lookup: lowercase canonical form -> approved rank string
+_RANK_CANONICAL = {r.lower(): r for r in APPROVED_RANKS}
+
+# Common alternate source values -> approved rank (lowercase keys)
+_RANK_ALIASES: dict = {
+    "po":                         "Police Officer",
+    "officer":                    "Police Officer",
+    "police ofc":                 "Police Officer",
+    "sr police officer":          "Senior Police Officer",
+    "senior officer":             "Senior Police Officer",
+    "mso":                        "Mobility Service Officer",
+    "mobility officer":           "Mobility Service Officer",
+    "sgt":                        "Sergeant",
+    "lt":                         "Lieutenant",
+    "capt":                       "Captain",
+    "asst chief":                 "Assistant Chief",
+    "assistant police chief":     "Assistant Chief",
+    "exec ac":                    "Executive AC",
+    "executive assistant chief":  "Executive AC",
+    "chief":                      "Chief of Police",
+    "civilian":                   "HPD Civilian",
+}
+
+
+def normalize_staff_rank(value: str) -> Tuple[str, bool]:
+    """
+    Normalize a source rank value to the approved ArcGIS staffrank.
+
+    Returns (normalized_rank, matched) where matched=False means the value
+    was not found in the approved list or aliases — caller should warn.
+    Blank input returns ("", True) — no warning needed for blank.
+    """
+    cleaned = clean_text(value)
+    if not cleaned:
+        return "", True
+
+    key = cleaned.lower()
+
+    # Direct canonical match (case-insensitive)
+    if key in _RANK_CANONICAL:
+        return _RANK_CANONICAL[key], True
+
+    # Alias match
+    if key in _RANK_ALIASES:
+        return _RANK_ALIASES[key], True
+
+    # No match — return cleaned original so row is not dropped
+    return cleaned, False
+
+
 def _get(df: pd.DataFrame, row: pd.Series, source_col: str) -> str:
     """Case-insensitive get from a row, returning cleaned string."""
     actual = _case_insensitive_col(df, source_col)
@@ -369,7 +441,16 @@ def transform_special_event_workup(
         out["unitradio"]  = _get(df, row, "UnitRadio")
         out["unitduties"] = _get(df, row, "UnitDuties")
         out["payrollnum"] = _get(df, row, "Payroll")
-        out["staffrank"]  = _get(df, row, "StaffRank")
+
+        # staffrank: normalize to approved ArcGIS values
+        raw_rank = _get(df, row, "StaffRank")
+        norm_rank, rank_matched = normalize_staff_rank(raw_rank)
+        out["staffrank"] = norm_rank
+        if not rank_matched:
+            warnings_list.append(
+                f"Row {i + 2}: Unknown staffrank '{raw_rank}' — kept as-is, verify against approved list."
+            )
+
         out["staffname"]  = _get(df, row, "StaffName")
         out["staffphone"] = _get(df, row, "StaffPhone")
         out["staffemail"] = _get(df, row, "Staffemail")
@@ -441,7 +522,15 @@ def transform_current_staffing_report(
         out["unitradio"] = _get(df, row, "RadioCallNumber")
         out["unitduties"]= ""
         out["payrollnum"]= emp_id
-        out["staffrank"] = _get(df, row, "RankDescription")
+
+        # staffrank: normalize to approved ArcGIS values
+        raw_rank = _get(df, row, "RankDescription")
+        norm_rank, rank_matched = normalize_staff_rank(raw_rank)
+        out["staffrank"] = norm_rank
+        if not rank_matched:
+            warnings_list.append(
+                f"Row {i + 2}: Unknown staffrank '{raw_rank}' — kept as-is, verify against approved list."
+            )
 
         # staffname: LastName, FirstName
         last  = _get(df, row, "LastName")
@@ -538,6 +627,20 @@ def validate_output(df: pd.DataFrame, source_df: pd.DataFrame = None) -> list:
             blank = df[col].apply(lambda v: not str(v).strip()).sum()
             if blank:
                 issues.append(f"{blank} row(s) have blank {col}.")
+
+    # Unknown staffrank values (not in approved ArcGIS list)
+    if "staffrank" in df.columns:
+        approved_lower = {r.lower() for r in APPROVED_RANKS}
+        bad_ranks = df[
+            df["staffrank"].apply(
+                lambda v: bool(str(v).strip()) and str(v).strip().lower() not in approved_lower
+            )
+        ]["staffrank"].unique().tolist()
+        if bad_ranks:
+            issues.append(
+                f"staffrank value(s) not in approved ArcGIS list: {bad_ranks}. "
+                f"These rows are included but may fail ArcGIS validation."
+            )
 
     return issues
 
