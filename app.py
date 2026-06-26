@@ -1,17 +1,35 @@
 """
 app.py
-Streamlit UI for the ArcGIS Special Event Staff Converter.
-Supports multiple file uploads — each file processed individually,
-all rows combined into one output workbook.
+------
+Streamlit web UI for the ArcGIS Special Event Staff Converter.
+
+This is the application entry point. It handles:
+  - File upload (multiple files, drag-and-drop)
+  - Per-file detection, transformation, and input preview
+  - Validation summary across all uploaded files
+  - Combined output preview
+  - Download as an ArcGIS-ready Excel workbook
+
+Run locally with:
+    streamlit run app.py
+
+All business logic (column mapping, rank normalization, datetime parsing,
+template writing) lives in staff_transformer.py -- this file is UI only.
+Keeping them separate makes the transformer testable without Streamlit.
+
+Requires Python 3.9+ with packages from requirements.txt, or the ArcGIS
+Pro conda environment with those packages installed via pip.
 """
 
-import os
-import io
-import traceback
+import os           # path operations for locating the template file at startup
+import io           # BytesIO for buffering uploaded file bytes for reliable multi-read
+import traceback    # format full Python stack traces for display in error expanders
 
-import pandas as pd
-import streamlit as st
+import pandas as pd      # DataFrame for the summary table and multi-file concat
+import streamlit as st   # entire UI framework: widgets, layout, state, download
 
+# Import all transformation functions from the business logic module.
+# Every function here is tested and reusable without Streamlit.
 from staff_transformer import (
     ARCGIS_COLUMNS,
     load_source_file,
@@ -25,19 +43,30 @@ from staff_transformer import (
     STAFFING_HEADER_IDENTIFIERS,
 )
 
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
 
+# ===========================================================================
+# CONFIGURATION CONSTANTS
+# ===========================================================================
+
+# Absolute path to the ArcGIS template workbook.
+# __file__ is this script's path; os.path.dirname gives its containing directory.
+# Joining with "templates/" ensures the path is correct regardless of which
+# directory the user runs "streamlit run app.py" from.
 TEMPLATE_PATH = os.path.join(
     os.path.dirname(__file__), "templates", "Sample_Batch_Load_Event_Staff_Template.xlsx"
 )
+
+# Output filename shown in the browser's download dialog
 OUTPUT_FILENAME = "ArcGIS_Special_Event_Staff_Upload.xlsx"
 
-# ---------------------------------------------------------------------------
-# Page setup
-# ---------------------------------------------------------------------------
 
+# ===========================================================================
+# PAGE SETUP
+# ===========================================================================
+
+# set_page_config() MUST be the first Streamlit call in the script.
+# Placing any other st.* call before this raises a StreamlitAPIException.
+# layout="wide" uses the full browser window width for the data preview tables.
 st.set_page_config(
     page_title="ArcGIS Special Event Staff Converter",
     page_icon="🚔",
@@ -45,6 +74,9 @@ st.set_page_config(
 )
 
 st.title("ArcGIS Special Event Staff Converter")
+
+# Top-of-page overview so new users understand the tool before uploading files.
+# Written as a numbered list to match the numbered steps shown on the page.
 st.markdown(
     """
     This tool converts HPD staffing export files into the format required by the
@@ -62,9 +94,10 @@ st.markdown(
     """
 )
 
-# ---------------------------------------------------------------------------
-# Sidebar settings
-# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# SIDEBAR -- USER-CONFIGURABLE SETTINGS
+# ===========================================================================
 
 st.sidebar.header("⚙️ Settings")
 st.sidebar.markdown(
@@ -72,34 +105,56 @@ st.sidebar.markdown(
     "Change them here before uploading if your event requires different values."
 )
 
+# ---------------------------------------------------------------------------
+# Default field values
+# ---------------------------------------------------------------------------
+# Each input provides a fallback value written to the output when the
+# corresponding source column is blank. Passed as arguments to the transform
+# functions so they can be applied consistently across all rows.
+# ---------------------------------------------------------------------------
 st.sidebar.markdown("**Default Field Values**")
+
 default_unit_type_workup = st.sidebar.text_input(
     "Default Unit Type (SpecialEventWorkup)",
     value="Vehicle",
     help="Applied to unittype when the source UnitType column is blank.",
 )
+
 default_unit_type_staffing = st.sidebar.text_input(
     "Default Unit Type (CurrentStaffingReport)",
     value="Traffic Control",
     help="Applied to unittype for all CurrentStaffingReport rows.",
 )
+
 default_staff_status = st.sidebar.text_input(
     "Default Staff Status",
     value="On Duty",
     help="Applied to staffstatus when the source StaffStatus column is blank.",
 )
+
 default_staff_agency = st.sidebar.text_input(
     "Default Staff Agency",
     value="HPD",
     help="Applied to staffagency for all rows.",
 )
+
 default_event_status = st.sidebar.text_input(
     "Default Event Status",
     value="Event Active",
     help="Applied to eventstatus for all rows.",
 )
 
+# ---------------------------------------------------------------------------
+# Time offset setting
+# ---------------------------------------------------------------------------
+# Source staffing reports store shift times in UTC. ArcGIS and the HPD
+# event dashboard display times in Central time.
+#   CDT (summer): UTC-5  ->  add +5 hours
+#   CST (winter): UTC-6  ->  add +6 hours
+# Default is +5. Set to 0 if source times are already in local time.
+# ---------------------------------------------------------------------------
 st.sidebar.markdown("**Time Settings**")
+
 offset_hours = st.sidebar.number_input(
     "Time Offset Hours",
     min_value=-24,
@@ -113,8 +168,16 @@ offset_hours = st.sidebar.number_input(
     ),
 )
 
+# ---------------------------------------------------------------------------
+# Template status indicator
+# ---------------------------------------------------------------------------
+# The ArcGIS template workbook MUST be present before the app can generate
+# output. We check at startup and display the status prominently so the
+# analyst sees the issue immediately -- not after uploading and processing files.
+# ---------------------------------------------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.markdown("**Template Status**")
+
 template_exists = os.path.isfile(TEMPLATE_PATH)
 if template_exists:
     st.sidebar.success("✅ ArcGIS template found")
@@ -125,9 +188,10 @@ else:
         "in the `templates/` folder and restart the app."
     )
 
-# ---------------------------------------------------------------------------
-# Step 1 — File upload
-# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# STEP 1 -- FILE UPLOAD
+# ===========================================================================
 
 st.divider()
 st.subheader("Step 1 — Upload Staffing Files")
@@ -137,6 +201,9 @@ st.markdown(
     "a single output workbook."
 )
 
+# accept_multiple_files=True allows the analyst to combine multiple shifts or
+# multiple event days into a single upload batch. All uploaded files are processed
+# individually and their rows are concatenated before writing to the template.
 uploaded_files = st.file_uploader(
     "Upload staffing files",
     type=["csv", "xlsx", "xls"],
@@ -144,63 +211,125 @@ uploaded_files = st.file_uploader(
     help="Accepts CurrentStaffingReport.csv or SpecialEventWorkupforGIS.csv (any filename).",
 )
 
+# Stop rendering the rest of the page until at least one file is uploaded.
+# st.stop() exits the Streamlit script run immediately -- nothing below executes
+# until the user uploads a file and Streamlit reruns the script.
 if not uploaded_files:
     st.info("👆 Upload one or more files above to begin.")
     st.stop()
 
-# ---------------------------------------------------------------------------
-# Helper: process one uploaded file
-# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# HELPER: process_file()
+# ===========================================================================
 
 def process_file(uploaded_file):
+    """
+    Process a single uploaded file through the full pipeline: load -> detect -> transform.
+
+    Returns a 4-tuple: (output_df, source_df, warnings, fmt_label)
+        output_df:  20-column ArcGIS DataFrame ready for the template; None on error
+        source_df:  cleaned source DataFrame shown in the input preview; None on load error
+        warnings:   list of warning strings to display in the Step 3 validation section
+        fmt_label:  human-readable format string (e.g., "CurrentStaffingReport.csv")
+                    or "error" / "unknown" if the file could not be processed
+
+    -------------------------------------------------------------------------
+    WHY WE BUFFER FILE BYTES BEFORE ANY READS:
+    -------------------------------------------------------------------------
+    Streamlit's UploadedFile object is a file-like wrapper. After any code
+    calls file_obj.read() once, the internal read position is at EOF. Calling
+    file_obj.seek(0) is NOT reliably supported across all platforms and
+    Streamlit versions -- position may not reset, causing the second read to
+    return empty bytes and crashing the transform silently.
+
+    Solution: read ALL bytes once into the `file_bytes` variable, then create
+    a fresh io.BytesIO object (with .name set) for EVERY function that needs
+    to read the file. Each BytesIO starts at position 0 automatically.
+
+    The _make_buf() inner function encapsulates this pattern cleanly.
+    -------------------------------------------------------------------------
+    """
+    # Read all file bytes into memory exactly once
     file_bytes = uploaded_file.read()
     file_name  = uploaded_file.name
 
     def _make_buf():
+        """Return a fresh BytesIO buffer at position 0, with .name set for extension detection."""
         buf = io.BytesIO(file_bytes)
-        buf.name = file_name
+        buf.name = file_name  # load_source_file() reads .name to determine file type
         return buf
 
-    # Load
+    # ------------------------------------------------------------------
+    # Phase 1: Load raw file into DataFrame
+    # ------------------------------------------------------------------
+    # load_source_file() uses Python's csv module (not pandas) for CSV files
+    # to handle variable-width rows (title rows + data rows). See staff_transformer.py
+    # for the detailed explanation of why pandas cannot handle this file structure.
     try:
         raw_df, ext = load_source_file(_make_buf())
     except Exception as e:
+        # Return gracefully with error label -- a bad file must not crash the whole app
         return None, None, [f"**{file_name}**: Could not read file — {e}"], "error"
 
-    # Detect format
-    fmt = detect_source_format(raw_df)
-    source_df = raw_df.copy()
-    _header_row_used = None
+    # ------------------------------------------------------------------
+    # Phase 2: Detect source format from column names
+    # ------------------------------------------------------------------
+    # For SpecialEventWorkupforGIS.csv this succeeds immediately because the
+    # first row IS the header. For CurrentStaffingReport.csv the first rows
+    # are title rows so column names are integers (0, 1, 2, ...) and format
+    # detection returns "unknown".
+    fmt       = detect_source_format(raw_df)
+    source_df = raw_df.copy()  # shown in input preview; may be updated below
+    _header_row_used = None     # track whether header detection already ran
 
+    # ------------------------------------------------------------------
+    # Phase 3: Fallback header detection for title-row CSVs
+    # ------------------------------------------------------------------
+    # When format is "unknown", scan row VALUES for known staffing column
+    # headers (e.g., "Division", "RankDescription", "EmpID"). Once found,
+    # reparse_staffing_from_raw() slices the raw DataFrame at that row to
+    # produce a properly-headered DataFrame without re-reading the file.
     if fmt == "unknown":
         header_row = find_current_staffing_header_row(raw_df)
         if header_row is not None:
             source_df = reparse_staffing_from_raw(raw_df, header_row)
-            fmt = detect_source_format(source_df)
+            fmt = detect_source_format(source_df)  # re-detect on clean DataFrame
             _header_row_used = header_row
 
+    # If format is still unknown after fallback, the file structure is not recognized
     if fmt == "unknown":
         return None, None, [
             f"**{file_name}**: Could not identify source format. "
             f"Expected columns for SpecialEventWorkupforGIS or CurrentStaffingReport were not found."
         ], "unknown"
 
+    # Map internal format keys to display names shown in the UI summary table
     fmt_labels = {
         "workup":   "SpecialEventWorkupforGIS.csv",
         "staffing": "CurrentStaffingReport.csv",
     }
     fmt_label = fmt_labels.get(fmt, fmt)
 
-    # Strip title rows for staffing format if not already done
+    # ------------------------------------------------------------------
+    # Phase 4: Strip title rows for staffing format (if not done yet)
+    # ------------------------------------------------------------------
+    # If format was detected directly on the first pass (without the fallback
+    # above), raw_df may still include title rows at the top of the DataFrame.
+    # Reparse now so transform_current_staffing_report() sees only data rows.
     if fmt == "staffing" and _header_row_used is None:
         header_row = find_current_staffing_header_row(raw_df)
         if header_row is not None and header_row > 0:
             source_df = reparse_staffing_from_raw(raw_df, header_row)
 
-    # Column warnings
+    # ------------------------------------------------------------------
+    # Phase 5: Check for missing source columns
+    # ------------------------------------------------------------------
+    # Warn if expected columns are absent -- the transform will produce blank
+    # values for those fields, which may cause ArcGIS validation errors downstream.
     col_warnings = []
     if fmt == "workup":
-        expected = {"UnitId", "StaffRank", "StaffName", "ShiftStart", "ShiftEnd"}
+        expected     = {"UnitId", "StaffRank", "StaffName", "ShiftStart", "ShiftEnd"}
         actual_lower = {str(c).strip().lower() for c in source_df.columns}
         missing = [c for c in expected if c.lower() not in actual_lower]
         if missing:
@@ -213,7 +342,12 @@ def process_file(uploaded_file):
         if missing:
             col_warnings.append(f"**{file_name}**: Missing source columns: {missing}")
 
-    # Transform
+    # ------------------------------------------------------------------
+    # Phase 6: Transform source DataFrame to ArcGIS output schema
+    # ------------------------------------------------------------------
+    # Each transform function returns (output_df, warnings_list).
+    # We pass all sidebar settings so the transform uses the analyst's
+    # configured defaults rather than hardcoded values.
     try:
         if fmt == "workup":
             output_df, transform_warnings = transform_special_event_workup(
@@ -224,7 +358,7 @@ def process_file(uploaded_file):
                 default_staff_agency=default_staff_agency,
                 default_event_status=default_event_status,
             )
-        else:
+        else:  # "staffing"
             output_df, transform_warnings = transform_current_staffing_report(
                 source_df,
                 offset_hours=float(offset_hours),
@@ -234,19 +368,23 @@ def process_file(uploaded_file):
                 default_event_status=default_event_status,
             )
     except Exception as e:
+        # Return source_df so the input preview is still shown even if transform fails.
+        # Full traceback is included in the warning for debugging.
         return None, source_df, [
             f"**{file_name}**: Transformation failed — {e}\n{traceback.format_exc()}"
         ], fmt_label
 
+    # Prefix all transform warnings with the filename so the analyst can tell
+    # which file each warning came from when multiple files are uploaded at once.
     prefixed_warnings = [f"**{file_name}**: {w}" for w in transform_warnings]
     all_warnings = col_warnings + prefixed_warnings
 
     return output_df, source_df, all_warnings, fmt_label
 
 
-# ---------------------------------------------------------------------------
-# Step 2 — Process files and show input previews
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# STEP 2 -- PROCESS ALL UPLOADED FILES AND SHOW INPUT PREVIEWS
+# ===========================================================================
 
 st.divider()
 st.subheader("Step 2 — Input Preview")
@@ -255,17 +393,21 @@ st.markdown(
     "was read correctly before reviewing the converted output."
 )
 
-all_output_dfs = []
-all_warnings   = []
-file_summaries = []
+# These lists accumulate results across all uploaded files for later steps
+all_output_dfs = []   # list of output DataFrames -- pd.concat'd after the loop
+all_warnings   = []   # all warning strings from all files -- shown in Step 3
+file_summaries = []   # (filename, format_label, row_count) -- for the summary table
 
 for uf in uploaded_files:
     output_df, source_df, warnings, fmt_label = process_file(uf)
     all_warnings.extend(warnings)
 
+    # Count converted rows; 0 when output_df is None (error) or empty
     row_count = len(output_df) if output_df is not None and not output_df.empty else 0
     file_summaries.append((uf.name, fmt_label, row_count))
 
+    # Show per-file input preview in a collapsible expander.
+    # expanded=False keeps the UI compact when many files are uploaded.
     if source_df is not None:
         with st.expander(
             f"📄 {uf.name}  —  {fmt_label}  —  {row_count} rows converted",
@@ -275,22 +417,27 @@ for uf in uploaded_files:
                 "This is the raw source data read from the file. "
                 "The app automatically strips report title rows and finds the real column header."
             )
+            # Show first 20 rows to keep the UI responsive for large staffing files
             st.dataframe(source_df.head(20), use_container_width=True)
             if len(source_df) > 20:
                 st.caption(f"Showing first 20 of {len(source_df)} rows.")
 
+    # Collect non-empty output DataFrames to combine into the final output
     if output_df is not None and not output_df.empty:
         all_output_dfs.append(output_df)
 
-# ---------------------------------------------------------------------------
-# File summary table
-# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# FILES PROCESSED -- SUMMARY TABLE
+# ===========================================================================
 
 st.subheader("Files Processed")
 st.markdown(
     "Summary of all uploaded files. "
     "If a file shows **error** or **0 rows**, check the Warnings section below."
 )
+
+# Build a simple summary DataFrame displayed as a clean table with no index column
 summary_data = {
     "File":            [s[0] for s in file_summaries],
     "Detected Format": [s[1] for s in file_summaries],
@@ -298,10 +445,13 @@ summary_data = {
 }
 st.dataframe(pd.DataFrame(summary_data), use_container_width=True, hide_index=True)
 
-# ---------------------------------------------------------------------------
-# Stop early with warnings if no output produced
-# ---------------------------------------------------------------------------
 
+# ===========================================================================
+# EARLY STOP -- NO OUTPUT PRODUCED
+# ===========================================================================
+
+# If every file failed to produce output rows, show warnings and stop.
+# There is nothing to validate, preview, or download without output rows.
 if not all_output_dfs:
     st.divider()
     st.subheader("⚠️ Warnings")
@@ -311,14 +461,21 @@ if not all_output_dfs:
         "No rows were produced from any uploaded file. "
         "Review the warnings above and check that you uploaded a supported file format."
     )
-    st.stop()
+    st.stop()  # exits the script; nothing below executes
 
+# Combine all per-file output DataFrames into a single DataFrame.
+# ignore_index=True resets the row index so there are no duplicate index values
+# when multiple files each produced rows starting at index 0.
 combined_df = pd.concat(all_output_dfs, ignore_index=True)
 
-# ---------------------------------------------------------------------------
-# Step 3 — Validation summary
-# ---------------------------------------------------------------------------
 
+# ===========================================================================
+# STEP 3 -- VALIDATION SUMMARY
+# ===========================================================================
+
+# Run validation checks on the combined output and merge new issues into all_warnings.
+# validate_output() checks for blank unitid, duplicate unitid, blank staffname,
+# blank shift dates, and unknown staffrank values. See staff_transformer.py for details.
 val_warnings = validate_output(combined_df)
 all_warnings += val_warnings
 
@@ -336,9 +493,10 @@ else:
     for w in all_warnings:
         st.warning(w)
 
-# ---------------------------------------------------------------------------
-# Step 4 — Transformed output preview
-# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# STEP 4 -- CONVERTED OUTPUT PREVIEW
+# ===========================================================================
 
 st.divider()
 st.subheader("Step 4 — Converted Output Preview")
@@ -348,10 +506,16 @@ st.markdown(
     "Dates have been offset by the configured time offset hours."
 )
 
+# Format datetime columns as readable strings for display ONLY.
+# combined_df holds Python datetime objects in unitshiftstart and unitshiftend --
+# Streamlit's st.dataframe() renders those as raw epoch integers without formatting.
+# We create a display copy (preview_df) so the actual combined_df retains datetime
+# objects for correct Excel serial number writing in write_to_template().
 preview_df = combined_df.copy()
 for col in ("unitshiftstart", "unitshiftend"):
     if col in preview_df.columns:
         preview_df[col] = preview_df[col].apply(
+            # strftime() for datetime objects; str() fallback for raw strings (parse failures)
             lambda v: v.strftime("%Y/%m/%d %I:%M:%S %p") if hasattr(v, "strftime") else str(v)
         )
 
@@ -360,9 +524,10 @@ st.caption(
     f"**{len(combined_df)} total rows** from {len(all_output_dfs)} file(s) ready for upload."
 )
 
-# ---------------------------------------------------------------------------
-# Step 5 — Download
-# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# STEP 5 -- DOWNLOAD ARCGIS UPLOAD WORKBOOK
+# ===========================================================================
 
 st.divider()
 st.subheader("Step 5 — Download ArcGIS Upload Workbook")
@@ -372,6 +537,9 @@ st.markdown(
     "Special Event Solution batch upload process."
 )
 
+# Guard: re-check template existence here in case the file was removed after startup.
+# The sidebar already shows the status, but we block the download explicitly
+# to prevent a confusing error from write_to_template() reaching the user.
 if not template_exists:
     st.error(
         "Cannot generate download — ArcGIS template not found at "
@@ -379,6 +547,10 @@ if not template_exists:
     )
     st.stop()
 
+# Write the combined output DataFrame into the ArcGIS template workbook.
+# write_to_template() returns an io.BytesIO object at position 0.
+# We wrap in try/except so that template write errors show a clear message
+# with a collapsible traceback rather than crashing the app with a raw exception.
 try:
     workbook_bytes = write_to_template(combined_df, TEMPLATE_PATH)
 except Exception as e:
@@ -387,6 +559,9 @@ except Exception as e:
         st.code(traceback.format_exc())
     st.stop()
 
+# Download button: sends workbook_bytes as a file download when clicked.
+# type="primary" renders as a blue button to draw the analyst's eye to this action.
+# The MIME type tells the browser to treat this as an Excel file (.xlsx).
 st.download_button(
     label="⬇️ Download ArcGIS Upload Workbook",
     data=workbook_bytes,
