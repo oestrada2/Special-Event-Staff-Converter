@@ -103,129 +103,93 @@ st.markdown(
 # ===========================================================================
 
 st.sidebar.header("⚙️ Settings")
-st.sidebar.markdown(
-    "These values are used as defaults when a field is blank or missing in the source file. "
-    "Change them here before uploading if your event requires different values."
-)
+st.sidebar.caption("Click any field to expand and edit. Filled values override all output rows.")
 
 # ---------------------------------------------------------------------------
-# Default field values
+# Default Field Values -- each in its own collapsible expander
 # ---------------------------------------------------------------------------
-# Each input provides a fallback value written to the output when the
-# corresponding source column is blank. Passed as arguments to the transform
-# functions so they can be applied consistently across all rows.
-# ---------------------------------------------------------------------------
-st.sidebar.markdown("**Default Field Values**")
 
-default_unit_type_workup = st.sidebar.text_input(
-    "Default Unit Type (SpecialEventWorkup)",
-    value="Vehicle",
-    help="Overrides unittype for all rows. Leave blank to use source file values.",
-)
+with st.sidebar.expander("Default Unit Type (SpecialEventWorkup)"):
+    default_unit_type_workup = st.text_input(
+        "unit_type_workup", value="Vehicle", label_visibility="collapsed",
+        help="Overrides unittype for all rows. Leave blank to use source file values.",
+    )
 
-default_unit_type_staffing = st.sidebar.text_input(
-    "Default Unit Type (CurrentStaffingReport)",
-    value="Vehicle",
-    help="Overrides unittype for all rows. Leave blank to use source file values.",
-)
+with st.sidebar.expander("Default Unit Type (CurrentStaffingReport)"):
+    default_unit_type_staffing = st.text_input(
+        "unit_type_staffing", value="Vehicle", label_visibility="collapsed",
+        help="Overrides unittype for all rows. Leave blank to use source file values.",
+    )
 
-default_unit_radio = st.sidebar.text_input(
-    "Default Unit Radio",
-    value="",
-    help="Overrides unitradio for all rows when filled in. Leave blank to use source file values.",
-)
+with st.sidebar.expander("Default Unit Radio"):
+    default_unit_radio = st.text_input(
+        "unit_radio", value="", label_visibility="collapsed",
+        help="Overrides unitradio for all rows. Leave blank to use source file values.",
+    )
 
-default_unit_duties = st.sidebar.text_input(
-    "Default Unit Duties",
-    value="",
-    help="Overrides unitduties for all rows when filled in. Leave blank to use source file values.",
-)
+with st.sidebar.expander("Default Unit Duties"):
+    default_unit_duties = st.text_input(
+        "unit_duties", value="", label_visibility="collapsed",
+        help="Overrides unitduties for all rows. Leave blank to use source file values.",
+    )
 
-default_staff_status = st.sidebar.text_input(
-    "Default Staff Status",
-    value="On Duty",
-    help="Overrides staffstatus for all rows. Leave blank to use source file values.",
-)
+with st.sidebar.expander("Default Staff Status"):
+    default_staff_status = st.text_input(
+        "staff_status", value="On Duty", label_visibility="collapsed",
+        help="Overrides staffstatus for all rows. Leave blank to use source file values.",
+    )
 
-default_staff_agency = st.sidebar.text_input(
-    "Default Staff Agency",
-    value="HPD",
-    help="Overrides staffagency for all rows. Leave blank to use source file values.",
-)
+with st.sidebar.expander("Default Staff Agency"):
+    default_staff_agency = st.text_input(
+        "staff_agency", value="HPD", label_visibility="collapsed",
+        help="Overrides staffagency for all rows. Leave blank to use source file values.",
+    )
 
-default_event_status = st.sidebar.text_input(
-    "Default Event Status",
-    value="Event Active",
-    help="Overrides eventstatus for all rows. Leave blank to use source file values.",
-)
+with st.sidebar.expander("Default Event Status"):
+    default_event_status = st.text_input(
+        "event_status", value="Event Active", label_visibility="collapsed",
+        help="Overrides eventstatus for all rows. Leave blank to use source file values.",
+    )
 
 # ---------------------------------------------------------------------------
-# Time offset setting
+# Time offset -- collapsible
 # ---------------------------------------------------------------------------
-# Source staffing reports store shift times in UTC. ArcGIS and the HPD
-# event dashboard display times in Central time.
-#   CDT (summer): UTC-5  ->  add +5 hours
-#   CST (winter): UTC-6  ->  add +6 hours
-# Default is +5. Set to 0 if source times are already in local time.
-# ---------------------------------------------------------------------------
-st.sidebar.markdown("**Time Settings**")
 
-offset_hours = st.sidebar.number_input(
-    "Time Offset Hours",
-    min_value=-24,
-    max_value=24,
-    value=5,
-    step=1,
-    help=(
-        "Hours added to all ShiftStart and ShiftEnd times. "
-        "Default is +5 to convert from UTC to Central time (CST/CDT). "
-        "Change to 0 if your source times are already in local time."
-    ),
-)
+with st.sidebar.expander("Time Offset Hours"):
+    offset_hours = st.number_input(
+        "offset_hours", min_value=-24, max_value=24, value=5, step=1,
+        label_visibility="collapsed",
+        help=(
+            "Hours added to ShiftStart and ShiftEnd times. "
+            "+5 converts UTC to CDT. Set to 0 if source times are already local."
+        ),
+    )
 
 # ---------------------------------------------------------------------------
-# Default Shift Times
+# Default Shift Times -- date + time pickers, collapsible per field
 # ---------------------------------------------------------------------------
-# Optional date/time pickers to override unitshiftstart and unitshiftend for
-# ALL rows. Enable with the checkbox, then pick date and time.
-# The selected time has offset_hours added before being stored -- same UTC
-# conversion applied to source file datetimes.
-# Leave unchecked to keep shift times from the source file.
-# ---------------------------------------------------------------------------
-st.sidebar.markdown("---")
-st.sidebar.markdown("**Default Shift Times**")
-st.sidebar.caption(
-    f"Checking a box overrides that field for all rows. "
-    f"Selected time + {int(offset_hours)}h offset is stored."
-)
 
-override_shift_start = st.sidebar.checkbox("Override Shift Start")
 default_unitshiftstart = None
-if override_shift_start:
-    ss_date = st.sidebar.date_input(
-        "Shift Start Date", value=datetime.today().date(), key="ss_date"
-    )
-    ss_time = st.sidebar.time_input(
-        "Shift Start Time", value=dt_time(6, 0), key="ss_time",
-        help="Select the local shift start time. Offset hours will be added."
-    )
-    raw_ss = datetime.combine(ss_date, ss_time)
-    default_unitshiftstart = raw_ss + timedelta(hours=float(offset_hours))
-    st.sidebar.caption(f"Stored as: {default_unitshiftstart.strftime('%Y/%m/%d %I:%M %p')}")
+with st.sidebar.expander("Default Shift Start"):
+    st.caption(f"Selected time + {int(offset_hours)}h offset will be stored.")
+    ss_enable = st.checkbox("Enable shift start override", key="ss_enable")
+    if ss_enable:
+        ss_date = st.date_input("Date", value=datetime.today().date(), key="ss_date")
+        ss_time = st.time_input("Time", value=dt_time(6, 0), key="ss_time")
+        raw_ss = datetime.combine(ss_date, ss_time)
+        default_unitshiftstart = raw_ss + timedelta(hours=float(offset_hours))
+        st.caption(f"Stored as: {default_unitshiftstart.strftime('%Y/%m/%d %I:%M %p')}")
 
-override_shift_end = st.sidebar.checkbox("Override Shift End")
 default_unitshiftend = None
-if override_shift_end:
-    se_date = st.sidebar.date_input(
-        "Shift End Date", value=datetime.today().date(), key="se_date"
-    )
-    se_time = st.sidebar.time_input(
-        "Shift End Time", value=dt_time(14, 0), key="se_time",
-        help="Select the local shift end time. Offset hours will be added."
-    )
-    raw_se = datetime.combine(se_date, se_time)
-    default_unitshiftend = raw_se + timedelta(hours=float(offset_hours))
-    st.sidebar.caption(f"Stored as: {default_unitshiftend.strftime('%Y/%m/%d %I:%M %p')}")
+with st.sidebar.expander("Default Shift End"):
+    st.caption(f"Selected time + {int(offset_hours)}h offset will be stored.")
+    se_enable = st.checkbox("Enable shift end override", key="se_enable")
+    if se_enable:
+        se_date = st.date_input("Date", value=datetime.today().date(), key="se_date")
+        se_time = st.time_input("Time", value=dt_time(14, 0), key="se_time")
+        raw_se = datetime.combine(se_date, se_time)
+        default_unitshiftend = raw_se + timedelta(hours=float(offset_hours))
+        st.caption(f"Stored as: {default_unitshiftend.strftime('%Y/%m/%d %I:%M %p')}")
 
 # ---------------------------------------------------------------------------
 # Template status indicator
