@@ -139,7 +139,7 @@ def _series_clean(series: pd.Series) -> pd.Series:
 def _case_insensitive_col(df: pd.DataFrame, name: str) -> Optional[str]:
     """Return the actual column name in df matching `name` (case-insensitive)."""
     for col in df.columns:
-        if col.strip().lower() == name.lower():
+        if str(col).strip().lower() == name.lower():
             return col
     return None
 
@@ -309,7 +309,7 @@ def detect_source_format(df: pd.DataFrame) -> str:
     Return 'workup', 'staffing', or 'unknown'.
     Checks column names case-insensitively.
     """
-    cols_lower = {c.strip().lower() for c in df.columns}
+    cols_lower = {str(c).strip().lower() for c in df.columns}
 
     workup_signals = {"unitid", "staffrank", "staffname", "shiftstart", "shiftend"}
     staffing_signals = {"rankdescription", "lastname", "firstname", "empid", "shiftstart", "shiftend"}
