@@ -24,6 +24,7 @@ Pro conda environment with those packages installed via pip.
 import os           # path operations for locating the template file at startup
 import io           # BytesIO for buffering uploaded file bytes for reliable multi-read
 import traceback    # format full Python stack traces for display in error expanders
+from datetime import datetime  # used to generate a timestamp for the output filename
 
 import pandas as pd      # DataFrame for the summary table and multi-file concat
 import streamlit as st   # entire UI framework: widgets, layout, state, download
@@ -56,8 +57,9 @@ TEMPLATE_PATH = os.path.join(
     os.path.dirname(__file__), "templates", "Sample_Batch_Load_Event_Staff_Template.xlsx"
 )
 
-# Output filename shown in the browser's download dialog
-OUTPUT_FILENAME = "ArcGIS_Special_Event_Staff_Upload.xlsx"
+# Output filename base -- timestamp appended at download time so each download
+# is uniquely named and the analyst can sort/identify files by when they were generated.
+OUTPUT_FILENAME_BASE = "Batch_Load_Event_Staff_Template"
 
 
 # ===========================================================================
@@ -562,18 +564,24 @@ except Exception as e:
         st.code(traceback.format_exc())
     st.stop()
 
+# Generate a timestamp at the moment the download button is rendered so each
+# downloaded file has a unique, sortable name.
+# Format: YYYYMMDD_HHMMSS  (e.g., 20240615_143022)
+_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+output_filename = f"{OUTPUT_FILENAME_BASE}_{_ts}.xlsx"
+
 # Download button: sends workbook_bytes as a file download when clicked.
 # type="primary" renders as a blue button to draw the analyst's eye to this action.
 # The MIME type tells the browser to treat this as an Excel file (.xlsx).
 st.download_button(
     label="⬇️ Download ArcGIS Upload Workbook",
     data=workbook_bytes,
-    file_name=OUTPUT_FILENAME,
+    file_name=output_filename,
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     type="primary",
 )
 
 st.caption(
-    f"Downloaded file: `{OUTPUT_FILENAME}` — "
+    f"Downloaded file: `{output_filename}` — "
     "contains all converted rows in the ArcGIS Staff List format."
 )
