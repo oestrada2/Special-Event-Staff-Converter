@@ -1031,12 +1031,20 @@ def validate_output(df: pd.DataFrame, source_df: pd.DataFrame = None) -> list:
         issues.append(f"{blank_unit} row(s) have blank unitid.")
 
     # Check 4: duplicate unitid values
-    # Only check non-blank unitids -- blank unitid is already flagged above
+    # Only check non-blank unitids -- blank unitid is already flagged above.
+    # ArcGIS may overwrite or reject rows that share a unitid, so this is a
+    # significant warning the analyst must resolve before importing.
     uid_series = df["unitid"].astype(str).str.strip()
     non_blank  = uid_series[uid_series != ""]
-    dups = non_blank[non_blank.duplicated()].unique().tolist()
+    dup_mask   = non_blank.duplicated(keep=False)  # mark ALL copies of each duplicate
+    dup_count  = dup_mask.sum()
+    dups       = non_blank[non_blank.duplicated()].unique().tolist()
     if dups:
-        issues.append(f"Duplicate unitid value(s) found: {dups[:10]}")  # cap at 10 to keep output readable
+        issues.append(
+            f"⚠️ Duplicate unitid detected — {dup_count} row(s) share a unitid with another row. "
+            f"ArcGIS may overwrite or reject duplicate units on import. "
+            f"Repeated unitid value(s): {dups[:10]}"
+        )
 
     # Check 5: blank staffname
     blank_name = df["staffname"].apply(lambda v: not str(v).strip()).sum()

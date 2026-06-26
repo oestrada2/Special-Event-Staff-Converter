@@ -88,9 +88,10 @@ st.markdown(
 
     **How to use:**
     1. Upload one or more staffing files using the file uploader below.
-    2. Review the input preview and validation warnings.
-    3. Click **Download ArcGIS Upload Workbook** to get the completed Excel file.
-    4. Import the downloaded file into ArcGIS using the batch upload process.
+    2. Review the input preview and compare it to the converted output in Step 3.
+    3. Check the validation summary in Step 4 for any warnings.
+    4. Click **Download ArcGIS Upload Workbook** in Step 5 to get the completed Excel file.
+    5. Import the downloaded file into ArcGIS using the batch upload process.
     """
 )
 
@@ -470,36 +471,13 @@ combined_df = pd.concat(all_output_dfs, ignore_index=True)
 
 
 # ===========================================================================
-# STEP 3 -- VALIDATION SUMMARY
+# STEP 3 -- CONVERTED OUTPUT PREVIEW
 # ===========================================================================
-
-# Run validation checks on the combined output and merge new issues into all_warnings.
-# validate_output() checks for blank unitid, duplicate unitid, blank staffname,
-# blank shift dates, and unknown staffrank values. See staff_transformer.py for details.
-val_warnings = validate_output(combined_df)
-all_warnings += val_warnings
+# Placed immediately after Step 2 (input preview) so the analyst can scroll
+# between the source table and the converted output table to compare them.
 
 st.divider()
-st.subheader("Step 3 — Validation Summary")
-st.markdown(
-    "The app checks the converted data for common issues before writing the output file. "
-    "Warnings do **not** stop the download — review them and correct the source data if needed."
-)
-
-if not all_warnings:
-    st.success("✅ No validation issues found. Data looks clean.")
-else:
-    st.markdown(f"**{len(all_warnings)} issue(s) found:**")
-    for w in all_warnings:
-        st.warning(w)
-
-
-# ===========================================================================
-# STEP 4 -- CONVERTED OUTPUT PREVIEW
-# ===========================================================================
-
-st.divider()
-st.subheader("Step 4 — Converted Output Preview")
+st.subheader("Step 3 — Converted Output Preview")
 st.markdown(
     "This is the data that will be written into the ArcGIS batch upload workbook. "
     "Column names match the **Staff List** sheet in the ArcGIS template exactly. "
@@ -523,6 +501,31 @@ st.dataframe(preview_df, use_container_width=True)
 st.caption(
     f"**{len(combined_df)} total rows** from {len(all_output_dfs)} file(s) ready for upload."
 )
+
+
+# ===========================================================================
+# STEP 4 -- VALIDATION SUMMARY
+# ===========================================================================
+
+# Run validation checks on the combined output and merge new issues into all_warnings.
+# validate_output() checks for blank unitid, DUPLICATE unitid, blank staffname,
+# blank shift dates, and unknown staffrank values. See staff_transformer.py for details.
+val_warnings = validate_output(combined_df)
+all_warnings += val_warnings
+
+st.divider()
+st.subheader("Step 4 — Validation Summary")
+st.markdown(
+    "The app checks the converted data for common issues before writing the output file. "
+    "Warnings do **not** stop the download — review them and correct the source data if needed."
+)
+
+if not all_warnings:
+    st.success("✅ No validation issues found. Data looks clean.")
+else:
+    st.markdown(f"**{len(all_warnings)} issue(s) found:**")
+    for w in all_warnings:
+        st.warning(w)
 
 
 # ===========================================================================
