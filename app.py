@@ -649,7 +649,7 @@ output_filename = f"{OUTPUT_FILENAME_BASE}_{_ts}.xlsx"
 # type="primary" renders as a blue button to draw the analyst's eye to this action.
 # The MIME type tells the browser to treat this as an Excel file (.xlsx).
 st.download_button(
-    label="⬇️ Download ArcGIS Upload Workbook",
+    label="⬇️ Download Batch Load Event Staff Template",
     data=workbook_bytes,
     file_name=output_filename,
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
