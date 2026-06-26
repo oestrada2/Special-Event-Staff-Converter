@@ -810,10 +810,11 @@ def transform_special_event_workup(
 
         # Direct column mappings requiring no transformation
         out["unitsquad"]  = _get(df, row, "UnitSquad")
+        # Sidebar default overrides source when filled in; otherwise use source value
         radio = _get(df, row, "UnitRadio")
-        out["unitradio"]  = radio if radio else default_unit_radio
+        out["unitradio"]  = default_unit_radio if default_unit_radio else radio
         duties = _get(df, row, "UnitDuties")
-        out["unitduties"] = duties if duties else default_unit_duties
+        out["unitduties"] = default_unit_duties if default_unit_duties else duties
         out["payrollnum"] = _get(df, row, "Payroll")
 
         # staffrank: normalize source value to exact ArcGIS coded domain string.
@@ -923,9 +924,10 @@ def transform_current_staffing_report(
         out["unitloc"]   = ""                  # always blank -- not in staffing report
         out["unittype"]  = default_unit_type   # "Traffic Control" for all staffing rows
         out["unitsquad"] = _get(df, row, "UnitNo")
+        # Sidebar default overrides source when filled in; otherwise use source value
         radio = _get(df, row, "RadioCallNumber")
-        out["unitradio"] = radio if radio else default_unit_radio
-        out["unitduties"]= default_unit_duties  # not in staffing report; use sidebar default
+        out["unitradio"] = default_unit_radio if default_unit_radio else radio
+        out["unitduties"]= default_unit_duties  # staffing report has no duties column
         out["payrollnum"]= emp_id              # same as unitid
 
         # staffrank: RankDescription contains HPD rank names.

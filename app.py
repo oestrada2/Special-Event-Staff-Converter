@@ -132,13 +132,13 @@ default_unit_type_staffing = st.sidebar.text_input(
 default_unit_radio = st.sidebar.text_input(
     "Default Unit Radio",
     value="",
-    help="Applied to unitradio when the source radio column is blank.",
+    help="Overrides all unitradio values when filled in. Leave blank to use source file values.",
 )
 
 default_unit_duties = st.sidebar.text_input(
     "Default Unit Duties",
     value="",
-    help="Applied to unitduties when the source duties column is blank.",
+    help="Overrides all unitduties values when filled in. Leave blank to use source file values.",
 )
 
 default_staff_status = st.sidebar.text_input(
