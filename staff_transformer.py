@@ -195,6 +195,42 @@ UNIT_SHIFT_OPTIONS = [
     "Nights - 12 hr shift",
 ]
 
+# ---------------------------------------------------------------------------
+# UNIT TYPE OPTIONS -- ArcGIS coded domain values for the unittype field.
+# Used in both the sidebar dropdown and the inline cell editor in the output table.
+# ---------------------------------------------------------------------------
+UNIT_TYPE_OPTIONS = [
+    "",
+    "Ambulance",
+    "Apparatus",
+    "ATV",
+    "Bicycle Unit",
+    "Boat",
+    "Command Post",
+    "Drone Operator",
+    "Firefighter",
+    "Foot Patrol",
+    "HazMat Truck",
+    "Helicopter",
+    "K9",
+    "Medical Bicycle Unit",
+    "Medical Cart",
+    "Medical Tent",
+    "Mobile Surveillance Tower",
+    "Motorcycle",
+    "Mounted Unit",
+    "Negotiator",
+    "Paramedic",
+    "Prisoner Transport",
+    "Segway",
+    "Sniper",
+    "SUV",
+    "SWAT Team",
+    "Traffic Control",
+    "UTV",
+    "Vehicle",
+]
+
 
 # ===========================================================================
 # UTILITY HELPERS

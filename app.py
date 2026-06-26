@@ -34,6 +34,7 @@ import streamlit as st   # entire UI framework: widgets, layout, state, download
 from staff_transformer import (
     ARCGIS_COLUMNS,
     UNIT_SHIFT_OPTIONS,
+    UNIT_TYPE_OPTIONS,
     load_source_file,
     detect_source_format,
     find_current_staffing_header_row,
@@ -111,14 +112,16 @@ st.sidebar.caption("Click any field to expand and edit. Filled values override a
 # ---------------------------------------------------------------------------
 
 with st.sidebar.expander("Default Unit Type (SpecialEventWorkup)"):
-    default_unit_type_workup = st.text_input(
-        "unit_type_workup", value="Vehicle", label_visibility="collapsed",
+    default_unit_type_workup = st.selectbox(
+        "unit_type_workup", options=UNIT_TYPE_OPTIONS,
+        index=UNIT_TYPE_OPTIONS.index("Vehicle"), label_visibility="collapsed",
         help="Overrides unittype for all rows. Leave blank to use source file values.",
     )
 
 with st.sidebar.expander("Default Unit Type (CurrentStaffingReport)"):
-    default_unit_type_staffing = st.text_input(
-        "unit_type_staffing", value="Vehicle", label_visibility="collapsed",
+    default_unit_type_staffing = st.selectbox(
+        "unit_type_staffing", options=UNIT_TYPE_OPTIONS,
+        index=UNIT_TYPE_OPTIONS.index("Vehicle"), label_visibility="collapsed",
         help="Overrides unittype for all rows. Leave blank to use source file values.",
     )
 
@@ -536,9 +539,9 @@ for col in ("unitshiftstart", "unitshiftend"):
             lambda v: v.strftime("%Y/%m/%d %I:%M:%S %p") if hasattr(v, "strftime") else str(v)
         )
 
-# data_editor: only unitshift is editable (dropdown); all other columns are read-only.
-# The returned edited_df captures any per-row unitshift changes made by the analyst.
-_readonly_cols = [c for c in preview_df.columns if c != "unitshift"]
+# data_editor: unitshift and unittype are editable (dropdowns); all other columns are read-only.
+# The returned edited_df captures any per-row changes made by the analyst.
+_readonly_cols = [c for c in preview_df.columns if c not in ("unitshift", "unittype")]
 edited_df = st.data_editor(
     preview_df,
     column_config={
@@ -546,17 +549,23 @@ edited_df = st.data_editor(
             "unitshift",
             options=UNIT_SHIFT_OPTIONS,
             required=False,
-        )
+        ),
+        "unittype": st.column_config.SelectboxColumn(
+            "unittype",
+            options=UNIT_TYPE_OPTIONS,
+            required=False,
+        ),
     },
     disabled=_readonly_cols,
     use_container_width=True,
     hide_index=True,
 )
-# Apply any per-row unitshift edits back into combined_df before template write.
+# Apply per-row edits back into combined_df before template write.
 combined_df["unitshift"] = edited_df["unitshift"].values
+combined_df["unittype"]  = edited_df["unittype"].values
 st.caption(
     f"**{len(combined_df)} total rows** from {len(all_output_dfs)} file(s) ready for upload. "
-    "Click any **unitshift** cell to change it."
+    "Click any **unitshift** or **unittype** cell to change it."
 )
 
 
