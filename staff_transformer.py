@@ -274,26 +274,32 @@ def load_source_file(file_obj) -> Tuple[pd.DataFrame, str]:
     Load CSV or XLSX from a file-like object.
     Returns (dataframe, file_extension).
     All ID-style columns are read as strings to preserve leading zeros.
+
+    For CSVs, uses Python's csv module to handle files where title rows
+    have fewer fields than data rows (e.g. Textbox23 header with 1 field,
+    data rows with 13 fields). Pads short rows with empty strings.
     """
+    import csv as _csv
+    import io as _io
+
     name = getattr(file_obj, "name", "")
     ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
 
     if ext == "csv":
-        # Try normal read first (works for clean files without title rows).
-        # Fall back to header=None when title rows cause column-count mismatch errors.
-        try:
-            df = pd.read_csv(file_obj, dtype=str, keep_default_na=False)
-        except Exception:
-            file_obj.seek(0)
-            # Python engine handles variable column counts (title rows with
-            # fewer fields than data rows) by padding short rows with NaN.
-            df = pd.read_csv(
-                file_obj,
-                dtype=str,
-                keep_default_na=False,
-                header=None,
-                engine="python",
-            )
+        raw = file_obj.read()
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8", errors="replace")
+
+        reader = _csv.reader(_io.StringIO(raw))
+        rows = list(reader)
+
+        if not rows:
+            raise ValueError("CSV file is empty.")
+
+        max_cols = max(len(r) for r in rows)
+        padded = [r + [""] * (max_cols - len(r)) for r in rows]
+        df = pd.DataFrame(padded, dtype=str)
+
     elif ext in ("xlsx", "xls"):
         df = pd.read_excel(file_obj, dtype=str, keep_default_na=False)
     else:
