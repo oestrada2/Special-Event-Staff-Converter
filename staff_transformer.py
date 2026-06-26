@@ -748,6 +748,8 @@ def transform_special_event_workup(
     df: pd.DataFrame,
     offset_hours: float = 5,
     default_unit_type: str = "Vehicle",
+    default_unit_radio: str = "",
+    default_unit_duties: str = "",
     default_staff_status: str = "On Duty",
     default_staff_agency: str = "HPD",
     default_event_status: str = "Event Active",
@@ -808,8 +810,10 @@ def transform_special_event_workup(
 
         # Direct column mappings requiring no transformation
         out["unitsquad"]  = _get(df, row, "UnitSquad")
-        out["unitradio"]  = _get(df, row, "UnitRadio")
-        out["unitduties"] = _get(df, row, "UnitDuties")
+        radio = _get(df, row, "UnitRadio")
+        out["unitradio"]  = radio if radio else default_unit_radio
+        duties = _get(df, row, "UnitDuties")
+        out["unitduties"] = duties if duties else default_unit_duties
         out["payrollnum"] = _get(df, row, "Payroll")
 
         # staffrank: normalize source value to exact ArcGIS coded domain string.
@@ -874,6 +878,8 @@ def transform_current_staffing_report(
     df: pd.DataFrame,
     offset_hours: float = 5,
     default_unit_type: str = "Vehicle",
+    default_unit_radio: str = "",
+    default_unit_duties: str = "",
     default_staff_status: str = "On Duty",
     default_staff_agency: str = "HPD",
     default_event_status: str = "Event Active",
@@ -917,8 +923,9 @@ def transform_current_staffing_report(
         out["unitloc"]   = ""                  # always blank -- not in staffing report
         out["unittype"]  = default_unit_type   # "Traffic Control" for all staffing rows
         out["unitsquad"] = _get(df, row, "UnitNo")
-        out["unitradio"] = _get(df, row, "RadioCallNumber")
-        out["unitduties"]= ""                  # not in staffing report
+        radio = _get(df, row, "RadioCallNumber")
+        out["unitradio"] = radio if radio else default_unit_radio
+        out["unitduties"]= default_unit_duties  # not in staffing report; use sidebar default
         out["payrollnum"]= emp_id              # same as unitid
 
         # staffrank: RankDescription contains HPD rank names.

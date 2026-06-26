@@ -129,6 +129,18 @@ default_unit_type_staffing = st.sidebar.text_input(
     help="Applied to unittype for all CurrentStaffingReport rows.",
 )
 
+default_unit_radio = st.sidebar.text_input(
+    "Default Unit Radio",
+    value="",
+    help="Applied to unitradio when the source radio column is blank.",
+)
+
+default_unit_duties = st.sidebar.text_input(
+    "Default Unit Duties",
+    value="",
+    help="Applied to unitduties when the source duties column is blank.",
+)
+
 default_staff_status = st.sidebar.text_input(
     "Default Staff Status",
     value="On Duty",
@@ -357,6 +369,8 @@ def process_file(uploaded_file):
                 source_df,
                 offset_hours=float(offset_hours),
                 default_unit_type=default_unit_type_workup,
+                default_unit_radio=default_unit_radio,
+                default_unit_duties=default_unit_duties,
                 default_staff_status=default_staff_status,
                 default_staff_agency=default_staff_agency,
                 default_event_status=default_event_status,
@@ -366,6 +380,8 @@ def process_file(uploaded_file):
                 source_df,
                 offset_hours=float(offset_hours),
                 default_unit_type=default_unit_type_staffing,
+                default_unit_radio=default_unit_radio,
+                default_unit_duties=default_unit_duties,
                 default_staff_status=default_staff_status,
                 default_staff_agency=default_staff_agency,
                 default_event_status=default_event_status,
