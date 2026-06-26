@@ -1,0 +1,65 @@
+ArcGIS Special Event Staff Converter — Project Contents
+========================================================
+Last updated: 2026-06-26
+
+
+FOLDERS
+-------
+
+.devcontainer\
+    Configuration for running the app inside a VS Code Dev Container (Docker).
+    Not needed for normal local use. Safe to ignore.
+
+.git\
+    Git version control history. Tracks every saved change to the project.
+    Do NOT delete or modify. Managed automatically by Git.
+
+.streamlit\
+    Streamlit settings folder.
+    Contains config.toml which disables the email prompt when the app starts.
+    Do NOT delete — removing it causes Streamlit to ask for your email every launch.
+
+__pycache__\
+    Python's auto-generated cache of compiled code.
+    Created automatically when you run the app. Safe to ignore or delete.
+    It will be recreated the next time the app runs.
+
+templates\
+    Holds the ArcGIS batch upload Excel template:
+        Sample_Batch_Load_Event_Staff_Template.xlsx
+    The app reads this file to generate the output workbook.
+    Do NOT delete or rename the file inside. The app will fail without it.
+
+
+FILES
+-----
+
+app.py
+    The Streamlit user interface — the actual web app the analyst uses.
+    Handles file upload, sidebar settings, output preview, and download.
+    Run this file to launch the app.
+
+staff_transformer.py
+    All business logic: reads source CSVs, maps columns, normalizes ranks,
+    calculates shift labels, applies time offsets, and writes the Excel output.
+    No UI code — purely data processing. The largest and most complex file.
+
+run_app.bat
+    Double-click this file to launch the app.
+    Activates the ArcGIS Pro conda environment and starts Streamlit automatically.
+    Use this instead of typing commands in the terminal.
+
+requirements.txt
+    List of Python packages the app needs (streamlit, pandas, openpyxl, etc.).
+    Used to install dependencies with: pip install -r requirements.txt
+
+.gitignore
+    Tells Git which files to exclude from version control (e.g., CSV uploads,
+    secrets, temporary files). No action needed.
+
+README.md
+    Developer documentation: setup instructions, supported file formats,
+    sidebar settings reference, and troubleshooting guide.
+
+PROJECT_CONTENTS.txt
+    This file. Plain-English guide to what everything in this folder does.
