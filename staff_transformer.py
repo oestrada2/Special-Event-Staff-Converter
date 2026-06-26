@@ -533,7 +533,7 @@ def load_source_file(file_obj) -> Tuple[pd.DataFrame, str]:
         # non-UTF-8 characters (common in legacy police staffing export tools).
         raw = file_obj.read()
         if isinstance(raw, bytes):
-            raw = raw.decode("utf-8", errors="replace")
+            raw = raw.decode("utf-8-sig", errors="replace")
 
         # Parse all rows using Python's csv reader.
         # Handles quoted fields, commas inside values, and variable row widths correctly.
