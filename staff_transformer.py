@@ -804,9 +804,9 @@ def transform_special_event_workup(
         # unitloc: always blank -- deployment location is managed inside ArcGIS
         out["unitloc"] = ""
 
-        # unittype: source value takes precedence; falls back to sidebar default
+        # unittype: sidebar overrides when filled in; otherwise use source value
         ut = _get(df, row, "UnitType")
-        out["unittype"] = ut if ut else default_unit_type
+        out["unittype"] = default_unit_type if default_unit_type else ut
 
         # Direct column mappings requiring no transformation
         out["unitsquad"]  = _get(df, row, "UnitSquad")
@@ -833,15 +833,14 @@ def transform_special_event_workup(
         out["staffskills"] = _get(df, row, "StaffSkills")
         out["staffpay"]    = _get(df, row, "StaffPay")
 
-        # staffstatus: use source if present, else sidebar default
+        # staffstatus: sidebar overrides when filled in; otherwise use source value
         ss_val = _get(df, row, "StaffStatus")
-        out["staffstatus"] = ss_val if ss_val else default_staff_status
+        out["staffstatus"] = default_staff_status if default_staff_status else ss_val
 
         out["staffduty"] = _get(df, row, "StaffDuty")
 
-        # staffagency: ALWAYS "HPD" -- hard business rule for HPD deployments.
-        # The default_staff_agency argument is accepted for API consistency but not used.
-        out["staffagency"] = "HPD"
+        # staffagency: use sidebar value (default "HPD"); sidebar overrides source
+        out["staffagency"] = default_staff_agency if default_staff_agency else _get(df, row, "StaffAgency")
 
         # unitshiftstart and unitshiftend: parse UTC datetime strings and apply offset.
         # On success, store a Python datetime object so openpyxl writes a proper Excel
@@ -960,9 +959,9 @@ def transform_current_staffing_report(
         out["staffemail"]  = ""              # not available in staffing report
         out["staffskills"] = ""              # not available in staffing report
         out["staffpay"]    = ""              # not available in staffing report
-        out["staffstatus"] = default_staff_status   # always "On Duty"
+        out["staffstatus"] = default_staff_status   # sidebar value applied to all rows
         out["staffduty"]   = _get(df, row, "Division")
-        out["staffagency"] = "HPD"           # always hardcoded -- HPD business rule
+        out["staffagency"] = default_staff_agency if default_staff_agency else "HPD"
 
         # unitshift: staffing report may have an explicit "shift" column or
         # we fall back to deriving it from the actual start/end datetime strings.

@@ -120,43 +120,43 @@ st.sidebar.markdown("**Default Field Values**")
 default_unit_type_workup = st.sidebar.text_input(
     "Default Unit Type (SpecialEventWorkup)",
     value="Vehicle",
-    help="Applied to unittype when the source UnitType column is blank.",
+    help="Overrides unittype for all rows. Leave blank to use source file values.",
 )
 
 default_unit_type_staffing = st.sidebar.text_input(
     "Default Unit Type (CurrentStaffingReport)",
     value="Vehicle",
-    help="Applied to unittype for all CurrentStaffingReport rows.",
+    help="Overrides unittype for all rows. Leave blank to use source file values.",
 )
 
 default_unit_radio = st.sidebar.text_input(
     "Default Unit Radio",
     value="",
-    help="Overrides all unitradio values when filled in. Leave blank to use source file values.",
+    help="Overrides unitradio for all rows when filled in. Leave blank to use source file values.",
 )
 
 default_unit_duties = st.sidebar.text_input(
     "Default Unit Duties",
     value="",
-    help="Overrides all unitduties values when filled in. Leave blank to use source file values.",
+    help="Overrides unitduties for all rows when filled in. Leave blank to use source file values.",
 )
 
 default_staff_status = st.sidebar.text_input(
     "Default Staff Status",
     value="On Duty",
-    help="Applied to staffstatus when the source StaffStatus column is blank.",
+    help="Overrides staffstatus for all rows. Leave blank to use source file values.",
 )
 
 default_staff_agency = st.sidebar.text_input(
     "Default Staff Agency",
     value="HPD",
-    help="Applied to staffagency for all rows.",
+    help="Overrides staffagency for all rows. Leave blank to use source file values.",
 )
 
 default_event_status = st.sidebar.text_input(
     "Default Event Status",
     value="Event Active",
-    help="Applied to eventstatus for all rows.",
+    help="Overrides eventstatus for all rows. Leave blank to use source file values.",
 )
 
 # ---------------------------------------------------------------------------
