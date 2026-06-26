@@ -41,6 +41,7 @@ from staff_transformer import (
     load_source_file,
     detect_source_format,
     find_current_staffing_header_row,
+    find_workup_header_row,
     reparse_staffing_from_raw,
     transform_special_event_workup,
     transform_current_staffing_report,
@@ -325,12 +326,15 @@ def process_file(uploaded_file):
     # ------------------------------------------------------------------
     # Phase 3: Fallback header detection for title-row CSVs
     # ------------------------------------------------------------------
-    # When format is "unknown", scan row VALUES for known staffing column
-    # headers (e.g., "Division", "RankDescription", "EmpID"). Once found,
-    # reparse_staffing_from_raw() slices the raw DataFrame at that row to
-    # produce a properly-headered DataFrame without re-reading the file.
+    # Some CSV exports (both staffing and workup) include report title rows
+    # above the real column header. When format is "unknown", scan row VALUES
+    # for known column header strings to locate the real header row, then
+    # reparse the DataFrame from that row down.
     if fmt == "unknown":
+        # Try staffing first, then workup
         header_row = find_current_staffing_header_row(raw_df)
+        if header_row is None:
+            header_row = find_workup_header_row(raw_df)
         if header_row is not None:
             source_df = reparse_staffing_from_raw(raw_df, header_row)
             fmt = detect_source_format(source_df)  # re-detect on clean DataFrame

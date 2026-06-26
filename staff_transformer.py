@@ -165,6 +165,14 @@ STAFFING_HEADER_IDENTIFIERS = {
     "EmpID", "RadioCallNumber", "UnitNo", "shiftStart", "ShiftEnd",
 }
 
+# Column name strings that appear in the real header row of a
+# SpecialEventWorkupforGIS CSV that has title rows above the header.
+# Require >= 3 matches to confirm workup format.
+WORKUP_HEADER_IDENTIFIERS = {
+    "UnitId", "StaffRank", "StaffName", "ShiftStart", "ShiftEnd",
+    "UnitType", "UnitSquad", "UnitRadio", "UnitDuties",
+}
+
 # ===========================================================================
 # TEXT ID COLUMNS
 # ===========================================================================
@@ -630,6 +638,21 @@ def find_current_staffing_header_row(raw_df: pd.DataFrame) -> Optional[int]:
     for idx, row in raw_df.iterrows():
         cell_values = {str(v).strip() for v in row.values}
         if len(STAFFING_HEADER_IDENTIFIERS & cell_values) >= 5:
+            return idx
+    return None
+
+
+def find_workup_header_row(raw_df: pd.DataFrame) -> Optional[int]:
+    """
+    Scan a raw DataFrame to find the real column header row for a
+    SpecialEventWorkupforGIS CSV that has title rows before the header.
+
+    Uses WORKUP_HEADER_IDENTIFIERS; requires >= 3 matches in a single row.
+    Returns the 0-based raw_df row index, or None if not found.
+    """
+    for idx, row in raw_df.iterrows():
+        cell_values = {str(v).strip() for v in row.values}
+        if len(WORKUP_HEADER_IDENTIFIERS & cell_values) >= 3:
             return idx
     return None
 
