@@ -24,7 +24,7 @@ Pro conda environment with those packages installed via pip.
 import os           # path operations for locating the template file at startup
 import io           # BytesIO for buffering uploaded file bytes for reliable multi-read
 import traceback    # format full Python stack traces for display in error expanders
-from datetime import datetime  # used to generate a timestamp for the output filename
+from datetime import datetime, timedelta, time as dt_time  # timestamp, shift picker math
 
 import pandas as pd      # DataFrame for the summary table and multi-file concat
 import streamlit as st   # entire UI framework: widgets, layout, state, download
@@ -182,6 +182,50 @@ offset_hours = st.sidebar.number_input(
         "Change to 0 if your source times are already in local time."
     ),
 )
+
+# ---------------------------------------------------------------------------
+# Default Shift Times
+# ---------------------------------------------------------------------------
+# Optional date/time pickers to override unitshiftstart and unitshiftend for
+# ALL rows. Enable with the checkbox, then pick date and time.
+# The selected time has offset_hours added before being stored -- same UTC
+# conversion applied to source file datetimes.
+# Leave unchecked to keep shift times from the source file.
+# ---------------------------------------------------------------------------
+st.sidebar.markdown("---")
+st.sidebar.markdown("**Default Shift Times**")
+st.sidebar.caption(
+    f"Checking a box overrides that field for all rows. "
+    f"Selected time + {int(offset_hours)}h offset is stored."
+)
+
+override_shift_start = st.sidebar.checkbox("Override Shift Start")
+default_unitshiftstart = None
+if override_shift_start:
+    ss_date = st.sidebar.date_input(
+        "Shift Start Date", value=datetime.today().date(), key="ss_date"
+    )
+    ss_time = st.sidebar.time_input(
+        "Shift Start Time", value=dt_time(6, 0), key="ss_time",
+        help="Select the local shift start time. Offset hours will be added."
+    )
+    raw_ss = datetime.combine(ss_date, ss_time)
+    default_unitshiftstart = raw_ss + timedelta(hours=float(offset_hours))
+    st.sidebar.caption(f"Stored as: {default_unitshiftstart.strftime('%Y/%m/%d %I:%M %p')}")
+
+override_shift_end = st.sidebar.checkbox("Override Shift End")
+default_unitshiftend = None
+if override_shift_end:
+    se_date = st.sidebar.date_input(
+        "Shift End Date", value=datetime.today().date(), key="se_date"
+    )
+    se_time = st.sidebar.time_input(
+        "Shift End Time", value=dt_time(14, 0), key="se_time",
+        help="Select the local shift end time. Offset hours will be added."
+    )
+    raw_se = datetime.combine(se_date, se_time)
+    default_unitshiftend = raw_se + timedelta(hours=float(offset_hours))
+    st.sidebar.caption(f"Stored as: {default_unitshiftend.strftime('%Y/%m/%d %I:%M %p')}")
 
 # ---------------------------------------------------------------------------
 # Template status indicator
@@ -374,6 +418,8 @@ def process_file(uploaded_file):
                 default_staff_status=default_staff_status,
                 default_staff_agency=default_staff_agency,
                 default_event_status=default_event_status,
+                default_unitshiftstart=default_unitshiftstart,
+                default_unitshiftend=default_unitshiftend,
             )
         else:  # "staffing"
             output_df, transform_warnings = transform_current_staffing_report(
@@ -385,6 +431,8 @@ def process_file(uploaded_file):
                 default_staff_status=default_staff_status,
                 default_staff_agency=default_staff_agency,
                 default_event_status=default_event_status,
+                default_unitshiftstart=default_unitshiftstart,
+                default_unitshiftend=default_unitshiftend,
             )
     except Exception as e:
         # Return source_df so the input preview is still shown even if transform fails.

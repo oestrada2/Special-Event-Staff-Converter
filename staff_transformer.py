@@ -753,6 +753,8 @@ def transform_special_event_workup(
     default_staff_status: str = "On Duty",
     default_staff_agency: str = "HPD",
     default_event_status: str = "Event Active",
+    default_unitshiftstart: Optional[datetime] = None,
+    default_unitshiftend: Optional[datetime] = None,
 ) -> Tuple[pd.DataFrame, list]:
     """
     Map SpecialEventWorkupforGIS.csv columns into the 20-column ArcGIS schema.
@@ -843,20 +845,26 @@ def transform_special_event_workup(
         out["staffagency"] = default_staff_agency if default_staff_agency else _get(df, row, "StaffAgency")
 
         # unitshiftstart and unitshiftend: parse UTC datetime strings and apply offset.
-        # On success, store a Python datetime object so openpyxl writes a proper Excel
-        # datetime serial number. On failure, store the raw string so the cell is not
-        # silently blank, and emit a warning for the analyst to investigate.
+        # unitshiftstart / unitshiftend: sidebar picker overrides when set (offset already
+        # applied in app.py); otherwise parse source string and apply offset here.
+        _shift_overrides = {
+            "unitshiftstart": default_unitshiftstart,
+            "unitshiftend":   default_unitshiftend,
+        }
         for arcgis_col, src_col in WORKUP_DATETIME_FIELDS.items():
-            raw_val = _get(df, row, src_col)
-            dt_obj, ok = parse_and_offset_datetime(raw_val, offset_hours)
-            if ok:
-                out[arcgis_col] = dt_obj
+            if _shift_overrides[arcgis_col] is not None:
+                out[arcgis_col] = _shift_overrides[arcgis_col]  # already offset
             else:
-                out[arcgis_col] = raw_val
-                if raw_val:  # only warn when there was a non-blank value that failed to parse
-                    warnings_list.append(
-                        f"Row {i + 2}: Could not parse {arcgis_col} value '{raw_val}'"
-                    )
+                raw_val = _get(df, row, src_col)
+                dt_obj, ok = parse_and_offset_datetime(raw_val, offset_hours)
+                if ok:
+                    out[arcgis_col] = dt_obj
+                else:
+                    out[arcgis_col] = raw_val
+                    if raw_val:
+                        warnings_list.append(
+                            f"Row {i + 2}: Could not parse {arcgis_col} value '{raw_val}'"
+                        )
 
         # eventstatus: constant for all rows
         out["eventstatus"] = default_event_status
@@ -864,8 +872,6 @@ def transform_special_event_workup(
         rows.append(out)
 
     # Enforce ARCGIS_COLUMNS order explicitly.
-    # Being explicit here prevents any future dict insertion order surprise
-    # from affecting the column order written to the Excel template.
     result = pd.DataFrame(rows, columns=ARCGIS_COLUMNS)
     return result, warnings_list
 
@@ -883,6 +889,8 @@ def transform_current_staffing_report(
     default_staff_status: str = "On Duty",
     default_staff_agency: str = "HPD",
     default_event_status: str = "Event Active",
+    default_unitshiftstart: Optional[datetime] = None,
+    default_unitshiftend: Optional[datetime] = None,
 ) -> Tuple[pd.DataFrame, list]:
     """
     Map CurrentStaffingReport.csv columns into the 20-column ArcGIS schema.
@@ -974,18 +982,26 @@ def transform_current_staffing_report(
         else:
             out["unitshift"] = derive_unit_shift(ss_raw, se_raw)
 
-        # unitshiftstart and unitshiftend: parse and apply UTC offset.
+        # unitshiftstart / unitshiftend: sidebar picker overrides when set (offset already
+        # applied in app.py); otherwise parse source string and apply offset here.
+        _shift_overrides = {
+            "unitshiftstart": default_unitshiftstart,
+            "unitshiftend":   default_unitshiftend,
+        }
         for arcgis_col, src_col in STAFFING_DATETIME_FIELDS.items():
-            raw_val = _get(df, row, src_col)
-            dt_obj, ok = parse_and_offset_datetime(raw_val, offset_hours)
-            if ok:
-                out[arcgis_col] = dt_obj
+            if _shift_overrides[arcgis_col] is not None:
+                out[arcgis_col] = _shift_overrides[arcgis_col]  # already offset
             else:
-                out[arcgis_col] = raw_val
-                if raw_val:
-                    warnings_list.append(
-                        f"Row {i + 2}: Could not parse {arcgis_col} value '{raw_val}'"
-                    )
+                raw_val = _get(df, row, src_col)
+                dt_obj, ok = parse_and_offset_datetime(raw_val, offset_hours)
+                if ok:
+                    out[arcgis_col] = dt_obj
+                else:
+                    out[arcgis_col] = raw_val
+                    if raw_val:
+                        warnings_list.append(
+                            f"Row {i + 2}: Could not parse {arcgis_col} value '{raw_val}'"
+                        )
 
         out["eventstatus"] = default_event_status
 
