@@ -231,6 +231,24 @@ UNIT_TYPE_OPTIONS = [
     "Vehicle",
 ]
 
+STAFF_STATUS_OPTIONS = [
+    "",
+    "On Duty",
+    "Overtime",
+]
+
+STAFF_AGENCY_OPTIONS = [
+    "",
+    "HPD",
+    "OLEA",
+]
+
+EVENT_STATUS_OPTIONS = [
+    "",
+    "Event Active",
+    "Event Completed",
+]
+
 
 # ===========================================================================
 # UTILITY HELPERS

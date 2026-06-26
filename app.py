@@ -35,6 +35,9 @@ from staff_transformer import (
     ARCGIS_COLUMNS,
     UNIT_SHIFT_OPTIONS,
     UNIT_TYPE_OPTIONS,
+    STAFF_STATUS_OPTIONS,
+    STAFF_AGENCY_OPTIONS,
+    EVENT_STATUS_OPTIONS,
     load_source_file,
     detect_source_format,
     find_current_staffing_header_row,
@@ -144,20 +147,23 @@ with st.sidebar.expander("Default Unit Shift"):
     )
 
 with st.sidebar.expander("Default Staff Status"):
-    default_staff_status = st.text_input(
-        "staff_status", value="On Duty", label_visibility="collapsed",
+    default_staff_status = st.selectbox(
+        "staff_status", options=STAFF_STATUS_OPTIONS,
+        index=STAFF_STATUS_OPTIONS.index("On Duty"), label_visibility="collapsed",
         help="Overrides staffstatus for all rows. Leave blank to use source file values.",
     )
 
 with st.sidebar.expander("Default Staff Agency"):
-    default_staff_agency = st.text_input(
-        "staff_agency", value="HPD", label_visibility="collapsed",
+    default_staff_agency = st.selectbox(
+        "staff_agency", options=STAFF_AGENCY_OPTIONS,
+        index=STAFF_AGENCY_OPTIONS.index("HPD"), label_visibility="collapsed",
         help="Overrides staffagency for all rows. Leave blank to use source file values.",
     )
 
 with st.sidebar.expander("Default Event Status"):
-    default_event_status = st.text_input(
-        "event_status", value="Event Active", label_visibility="collapsed",
+    default_event_status = st.selectbox(
+        "event_status", options=EVENT_STATUS_OPTIONS,
+        index=EVENT_STATUS_OPTIONS.index("Event Active"), label_visibility="collapsed",
         help="Overrides eventstatus for all rows. Leave blank to use source file values.",
     )
 
@@ -539,21 +545,26 @@ for col in ("unitshiftstart", "unitshiftend"):
             lambda v: v.strftime("%Y/%m/%d %I:%M:%S %p") if hasattr(v, "strftime") else str(v)
         )
 
-# data_editor: unitshift and unittype are editable (dropdowns); all other columns are read-only.
-# The returned edited_df captures any per-row changes made by the analyst.
-_readonly_cols = [c for c in preview_df.columns if c not in ("unitshift", "unittype")]
+# data_editor: dropdown columns are editable; all others are read-only.
+_editable_cols = {"unitshift", "unittype", "staffstatus", "staffagency", "eventstatus"}
+_readonly_cols  = [c for c in preview_df.columns if c not in _editable_cols]
 edited_df = st.data_editor(
     preview_df,
     column_config={
         "unitshift": st.column_config.SelectboxColumn(
-            "unitshift",
-            options=UNIT_SHIFT_OPTIONS,
-            required=False,
+            "unitshift", options=UNIT_SHIFT_OPTIONS, required=False,
         ),
         "unittype": st.column_config.SelectboxColumn(
-            "unittype",
-            options=UNIT_TYPE_OPTIONS,
-            required=False,
+            "unittype", options=UNIT_TYPE_OPTIONS, required=False,
+        ),
+        "staffstatus": st.column_config.SelectboxColumn(
+            "staffstatus", options=STAFF_STATUS_OPTIONS, required=False,
+        ),
+        "staffagency": st.column_config.SelectboxColumn(
+            "staffagency", options=STAFF_AGENCY_OPTIONS, required=False,
+        ),
+        "eventstatus": st.column_config.SelectboxColumn(
+            "eventstatus", options=EVENT_STATUS_OPTIONS, required=False,
         ),
     },
     disabled=_readonly_cols,
@@ -561,11 +572,11 @@ edited_df = st.data_editor(
     hide_index=True,
 )
 # Apply per-row edits back into combined_df before template write.
-combined_df["unitshift"] = edited_df["unitshift"].values
-combined_df["unittype"]  = edited_df["unittype"].values
+for _col in _editable_cols:
+    combined_df[_col] = edited_df[_col].values
 st.caption(
     f"**{len(combined_df)} total rows** from {len(all_output_dfs)} file(s) ready for upload. "
-    "Click any **unitshift** or **unittype** cell to change it."
+    "Click any dropdown column cell to change it inline."
 )
 
 
