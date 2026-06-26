@@ -873,7 +873,7 @@ def transform_special_event_workup(
 def transform_current_staffing_report(
     df: pd.DataFrame,
     offset_hours: float = 5,
-    default_unit_type: str = "Traffic Control",
+    default_unit_type: str = "Vehicle",
     default_staff_status: str = "On Duty",
     default_staff_agency: str = "HPD",
     default_event_status: str = "Event Active",

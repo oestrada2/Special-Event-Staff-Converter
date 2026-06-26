@@ -125,7 +125,7 @@ default_unit_type_workup = st.sidebar.text_input(
 
 default_unit_type_staffing = st.sidebar.text_input(
     "Default Unit Type (CurrentStaffingReport)",
-    value="Traffic Control",
+    value="Vehicle",
     help="Applied to unittype for all CurrentStaffingReport rows.",
 )
 
