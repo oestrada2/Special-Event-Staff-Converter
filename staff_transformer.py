@@ -177,6 +177,24 @@ TEXT_ID_COLUMNS = {
     "empid", "payroll", "unitid", "unitno", "radiocallnumber", "unitradio",
 }
 
+# ---------------------------------------------------------------------------
+# UNIT SHIFT OPTIONS -- ArcGIS coded domain values for the unitshift field.
+# Used in both the sidebar dropdown and the inline cell editor in the output
+# table so the analyst always selects from the same approved set.
+# ---------------------------------------------------------------------------
+UNIT_SHIFT_OPTIONS = [
+    "",
+    "Days - 8 hr shift",
+    "Days - 10 hr shift",
+    "Days - 12 hr shift",
+    "Evenings - 8 hr shift",
+    "Evenings - 10 hr shift",
+    "Evenings - 12 hr shift",
+    "Nights - 8 hr shift",
+    "Nights - 10 hr shift",
+    "Nights - 12 hr shift",
+]
+
 
 # ===========================================================================
 # UTILITY HELPERS
@@ -750,6 +768,7 @@ def transform_special_event_workup(
     default_unit_type: str = "Vehicle",
     default_unit_radio: str = "",
     default_unit_duties: str = "",
+    default_unitshift: str = "",
     default_staff_status: str = "On Duty",
     default_staff_agency: str = "HPD",
     default_event_status: str = "Event Active",
@@ -793,15 +812,18 @@ def transform_special_event_workup(
         # unitid: direct source column mapping
         out["unitid"] = _get(df, row, "UnitId")
 
-        # unitshift: use source value if present; otherwise derive from shift times.
-        # Derived labels follow "Days/Evenings/Nights - N hr shift" pattern.
-        unit_shift_raw = _get(df, row, "UnitShift")
-        if unit_shift_raw:
-            out["unitshift"] = unit_shift_raw
+        # unitshift: sidebar dropdown overrides all rows when selected;
+        # otherwise use source value; fall back to derived label from times.
+        if default_unitshift:
+            out["unitshift"] = default_unitshift
         else:
-            ss = _get(df, row, "ShiftStart")
-            se = _get(df, row, "ShiftEnd")
-            out["unitshift"] = derive_unit_shift(ss, se)
+            unit_shift_raw = _get(df, row, "UnitShift")
+            if unit_shift_raw:
+                out["unitshift"] = unit_shift_raw
+            else:
+                ss = _get(df, row, "ShiftStart")
+                se = _get(df, row, "ShiftEnd")
+                out["unitshift"] = derive_unit_shift(ss, se)
 
         # unitloc: always blank -- deployment location is managed inside ArcGIS
         out["unitloc"] = ""
@@ -886,6 +908,7 @@ def transform_current_staffing_report(
     default_unit_type: str = "Vehicle",
     default_unit_radio: str = "",
     default_unit_duties: str = "",
+    default_unitshift: str = "",
     default_staff_status: str = "On Duty",
     default_staff_agency: str = "HPD",
     default_event_status: str = "Event Active",
@@ -971,16 +994,18 @@ def transform_current_staffing_report(
         out["staffduty"]   = _get(df, row, "Division")
         out["staffagency"] = default_staff_agency if default_staff_agency else "HPD"
 
-        # unitshift: staffing report may have an explicit "shift" column or
-        # we fall back to deriving it from the actual start/end datetime strings.
-        shift_label = _get(df, row, "shift")   # optional explicit label (some exports include this)
-        ss_raw = _get(df, row, "shiftStart")    # lowercase 's' -- must match source column exactly
-        se_raw = _get(df, row, "ShiftEnd")
-
-        if shift_label:
-            out["unitshift"] = shift_label      # use explicit label if present
+        # unitshift: sidebar dropdown overrides all rows when selected;
+        # otherwise use source "shift" column; fall back to derived label from times.
+        if default_unitshift:
+            out["unitshift"] = default_unitshift
         else:
-            out["unitshift"] = derive_unit_shift(ss_raw, se_raw)
+            shift_label = _get(df, row, "shift")
+            ss_raw = _get(df, row, "shiftStart")
+            se_raw = _get(df, row, "ShiftEnd")
+            if shift_label:
+                out["unitshift"] = shift_label
+            else:
+                out["unitshift"] = derive_unit_shift(ss_raw, se_raw)
 
         # unitshiftstart / unitshiftend: sidebar picker overrides when set (offset already
         # applied in app.py); otherwise parse source string and apply offset here.

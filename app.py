@@ -33,6 +33,7 @@ import streamlit as st   # entire UI framework: widgets, layout, state, download
 # Every function here is tested and reusable without Streamlit.
 from staff_transformer import (
     ARCGIS_COLUMNS,
+    UNIT_SHIFT_OPTIONS,
     load_source_file,
     detect_source_format,
     find_current_staffing_header_row,
@@ -131,6 +132,12 @@ with st.sidebar.expander("Default Unit Duties"):
     default_unit_duties = st.text_input(
         "unit_duties", value="", label_visibility="collapsed",
         help="Overrides unitduties for all rows. Leave blank to use source file values.",
+    )
+
+with st.sidebar.expander("Default Unit Shift"):
+    default_unitshift = st.selectbox(
+        "unit_shift", options=UNIT_SHIFT_OPTIONS, index=0, label_visibility="collapsed",
+        help="Overrides unitshift for all rows. Leave blank to use derived/source values.",
     )
 
 with st.sidebar.expander("Default Staff Status"):
@@ -379,6 +386,7 @@ def process_file(uploaded_file):
                 default_unit_type=default_unit_type_workup,
                 default_unit_radio=default_unit_radio,
                 default_unit_duties=default_unit_duties,
+                default_unitshift=default_unitshift,
                 default_staff_status=default_staff_status,
                 default_staff_agency=default_staff_agency,
                 default_event_status=default_event_status,
@@ -392,6 +400,7 @@ def process_file(uploaded_file):
                 default_unit_type=default_unit_type_staffing,
                 default_unit_radio=default_unit_radio,
                 default_unit_duties=default_unit_duties,
+                default_unitshift=default_unitshift,
                 default_staff_status=default_staff_status,
                 default_staff_agency=default_staff_agency,
                 default_event_status=default_event_status,
@@ -527,9 +536,27 @@ for col in ("unitshiftstart", "unitshiftend"):
             lambda v: v.strftime("%Y/%m/%d %I:%M:%S %p") if hasattr(v, "strftime") else str(v)
         )
 
-st.dataframe(preview_df, use_container_width=True)
+# data_editor: only unitshift is editable (dropdown); all other columns are read-only.
+# The returned edited_df captures any per-row unitshift changes made by the analyst.
+_readonly_cols = [c for c in preview_df.columns if c != "unitshift"]
+edited_df = st.data_editor(
+    preview_df,
+    column_config={
+        "unitshift": st.column_config.SelectboxColumn(
+            "unitshift",
+            options=UNIT_SHIFT_OPTIONS,
+            required=False,
+        )
+    },
+    disabled=_readonly_cols,
+    use_container_width=True,
+    hide_index=True,
+)
+# Apply any per-row unitshift edits back into combined_df before template write.
+combined_df["unitshift"] = edited_df["unitshift"].values
 st.caption(
-    f"**{len(combined_df)} total rows** from {len(all_output_dfs)} file(s) ready for upload."
+    f"**{len(combined_df)} total rows** from {len(all_output_dfs)} file(s) ready for upload. "
+    "Click any **unitshift** cell to change it."
 )
 
 
