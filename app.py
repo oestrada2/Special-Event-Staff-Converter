@@ -242,6 +242,10 @@ st.dataframe(pd.DataFrame(summary_data), use_container_width=True, hide_index=Tr
 # ---------------------------------------------------------------------------
 
 if not all_output_dfs:
+    st.divider()
+    st.subheader("Warnings")
+    for w in all_warnings:
+        st.warning(w)
     st.error("No rows produced from any uploaded file.")
     st.stop()
 
