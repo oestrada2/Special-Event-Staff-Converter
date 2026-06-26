@@ -886,8 +886,8 @@ def transform_special_event_workup(
     for i, row in df.iterrows():
         out = {}  # accumulates all 20 ArcGIS field values for this row
 
-        # unitid: direct source column mapping
-        out["unitid"] = _get(df, row, "UnitId")
+        # unitid: use UnitId column; fall back to Payroll if UnitId absent
+        out["unitid"] = _get(df, row, "UnitId") or _get(df, row, "Payroll")
 
         # unitshift: sidebar dropdown overrides all rows when selected;
         # otherwise use source value; fall back to derived label from times.
