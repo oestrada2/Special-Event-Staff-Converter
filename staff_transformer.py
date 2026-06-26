@@ -285,12 +285,14 @@ def load_source_file(file_obj) -> Tuple[pd.DataFrame, str]:
             df = pd.read_csv(file_obj, dtype=str, keep_default_na=False)
         except Exception:
             file_obj.seek(0)
+            # Python engine handles variable column counts (title rows with
+            # fewer fields than data rows) by padding short rows with NaN.
             df = pd.read_csv(
                 file_obj,
                 dtype=str,
                 keep_default_na=False,
                 header=None,
-                on_bad_lines="skip",
+                engine="python",
             )
     elif ext in ("xlsx", "xls"):
         df = pd.read_excel(file_obj, dtype=str, keep_default_na=False)
