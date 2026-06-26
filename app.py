@@ -45,64 +45,111 @@ st.set_page_config(
 )
 
 st.title("ArcGIS Special Event Staff Converter")
-st.caption(
-    "Upload one or more staffing CSVs, preview the conversion, and download "
-    "the completed ArcGIS batch upload workbook."
+st.markdown(
+    """
+    This tool converts HPD staffing export files into the format required by the
+    **ArcGIS Special Event Solution** batch upload workbook.
+
+    **Supported input files:**
+    - `CurrentStaffingReport.csv` — exported from the HPD staffing system
+    - `SpecialEventWorkupforGIS.csv` — exported from the Special Event Workup tool
+
+    **How to use:**
+    1. Upload one or more staffing files using the file uploader below.
+    2. Review the input preview and validation warnings.
+    3. Click **Download ArcGIS Upload Workbook** to get the completed Excel file.
+    4. Import the downloaded file into ArcGIS using the batch upload process.
+    """
 )
 
 # ---------------------------------------------------------------------------
 # Sidebar settings
 # ---------------------------------------------------------------------------
 
-st.sidebar.header("Settings")
+st.sidebar.header("⚙️ Settings")
+st.sidebar.markdown(
+    "These values are used as defaults when a field is blank or missing in the source file. "
+    "Change them here before uploading if your event requires different values."
+)
 
+st.sidebar.markdown("**Default Field Values**")
 default_unit_type_workup = st.sidebar.text_input(
-    "Default Unit Type (SpecialEventWorkup)", value="Vehicle"
+    "Default Unit Type (SpecialEventWorkup)",
+    value="Vehicle",
+    help="Applied to unittype when the source UnitType column is blank.",
 )
 default_unit_type_staffing = st.sidebar.text_input(
-    "Default Unit Type (CurrentStaffingReport)", value="Traffic Control"
+    "Default Unit Type (CurrentStaffingReport)",
+    value="Traffic Control",
+    help="Applied to unittype for all CurrentStaffingReport rows.",
 )
 default_staff_status = st.sidebar.text_input(
-    "Default Staff Status", value="On Duty"
+    "Default Staff Status",
+    value="On Duty",
+    help="Applied to staffstatus when the source StaffStatus column is blank.",
 )
 default_staff_agency = st.sidebar.text_input(
-    "Default Staff Agency", value="HPD"
+    "Default Staff Agency",
+    value="HPD",
+    help="Applied to staffagency for all rows.",
 )
 default_event_status = st.sidebar.text_input(
-    "Default Event Status", value="Event Active"
+    "Default Event Status",
+    value="Event Active",
+    help="Applied to eventstatus for all rows.",
 )
+
+st.sidebar.markdown("**Time Settings**")
 offset_hours = st.sidebar.number_input(
-    "Time Offset Hours", min_value=-24, max_value=24, value=5, step=1,
-    help="Hours added to all shift start/end times. Default is +5 (UTC to CST/CDT).",
+    "Time Offset Hours",
+    min_value=-24,
+    max_value=24,
+    value=5,
+    step=1,
+    help=(
+        "Hours added to all ShiftStart and ShiftEnd times. "
+        "Default is +5 to convert from UTC to Central time (CST/CDT). "
+        "Change to 0 if your source times are already in local time."
+    ),
 )
 
 st.sidebar.markdown("---")
-st.sidebar.markdown(
-    "**Template path:**\n\n`templates/Sample_Batch_Load_Event_Staff_Template.xlsx`"
-)
+st.sidebar.markdown("**Template Status**")
 template_exists = os.path.isfile(TEMPLATE_PATH)
 if template_exists:
-    st.sidebar.success("Template found")
+    st.sidebar.success("✅ ArcGIS template found")
 else:
-    st.sidebar.error("Template NOT found — place file in `templates/` folder")
+    st.sidebar.error(
+        "❌ Template NOT found\n\n"
+        "Place `Sample_Batch_Load_Event_Staff_Template.xlsx` "
+        "in the `templates/` folder and restart the app."
+    )
 
 # ---------------------------------------------------------------------------
-# File upload — multiple files allowed
+# Step 1 — File upload
 # ---------------------------------------------------------------------------
+
+st.divider()
+st.subheader("Step 1 — Upload Staffing Files")
+st.markdown(
+    "Drag and drop one or more staffing CSV files. You can upload multiple files at once "
+    "(for example, Days, Evenings, and Nights workups) and they will all be combined into "
+    "a single output workbook."
+)
 
 uploaded_files = st.file_uploader(
     "Upload staffing files",
     type=["csv", "xlsx", "xls"],
     accept_multiple_files=True,
-    help="Upload one or more CurrentStaffingReport or SpecialEventWorkupforGIS files.",
+    help="Accepts CurrentStaffingReport.csv or SpecialEventWorkupforGIS.csv (any filename).",
 )
 
 if not uploaded_files:
-    st.info("Drag and drop one or more CSV or XLSX files above to begin.")
+    st.info("👆 Upload one or more files above to begin.")
     st.stop()
 
 # ---------------------------------------------------------------------------
-# Helper: process one uploaded file -> (output_df, all_warnings, fmt_label)
+# Helper: process one uploaded file
 # ---------------------------------------------------------------------------
 
 def process_file(uploaded_file):
@@ -113,8 +160,6 @@ def process_file(uploaded_file):
         buf = io.BytesIO(file_bytes)
         buf.name = file_name
         return buf
-
-    raw_df_for_preview = None  # captured for display by caller
 
     # Load
     try:
@@ -156,14 +201,14 @@ def process_file(uploaded_file):
     col_warnings = []
     if fmt == "workup":
         expected = {"UnitId", "StaffRank", "StaffName", "ShiftStart", "ShiftEnd"}
-        actual_lower = {c.strip().lower() for c in source_df.columns}
+        actual_lower = {str(c).strip().lower() for c in source_df.columns}
         missing = [c for c in expected if c.lower() not in actual_lower]
         if missing:
             col_warnings.append(f"**{file_name}**: Missing source columns: {missing}")
     elif fmt == "staffing":
         expected = {"EmpID", "RankDescription", "LastName", "FirstName",
                     "RadioCallNumber", "UnitNo", "shiftStart", "ShiftEnd"}
-        actual_lower = {c.strip().lower() for c in source_df.columns}
+        actual_lower = {str(c).strip().lower() for c in source_df.columns}
         missing = [c for c in expected if c.lower() not in actual_lower]
         if missing:
             col_warnings.append(f"**{file_name}**: Missing source columns: {missing}")
@@ -189,9 +234,10 @@ def process_file(uploaded_file):
                 default_event_status=default_event_status,
             )
     except Exception as e:
-        return None, source_df, [f"**{file_name}**: Transformation failed — {e}\n{traceback.format_exc()}"], fmt_label
+        return None, source_df, [
+            f"**{file_name}**: Transformation failed — {e}\n{traceback.format_exc()}"
+        ], fmt_label
 
-    # Prefix file warnings with filename
     prefixed_warnings = [f"**{file_name}**: {w}" for w in transform_warnings]
     all_warnings = col_warnings + prefixed_warnings
 
@@ -199,10 +245,15 @@ def process_file(uploaded_file):
 
 
 # ---------------------------------------------------------------------------
-# Process all uploaded files
+# Step 2 — Process files and show input previews
 # ---------------------------------------------------------------------------
 
 st.divider()
+st.subheader("Step 2 — Input Preview")
+st.markdown(
+    "Each uploaded file is shown below. Expand a file to verify the source data "
+    "was read correctly before reviewing the converted output."
+)
 
 all_output_dfs = []
 all_warnings   = []
@@ -215,64 +266,87 @@ for uf in uploaded_files:
     row_count = len(output_df) if output_df is not None and not output_df.empty else 0
     file_summaries.append((uf.name, fmt_label, row_count))
 
-    # Show raw input preview per file inside an expander
     if source_df is not None:
-        with st.expander(f"Raw Input Preview — {uf.name} ({row_count} rows)", expanded=False):
+        with st.expander(
+            f"📄 {uf.name}  —  {fmt_label}  —  {row_count} rows converted",
+            expanded=False,
+        ):
+            st.markdown(
+                "This is the raw source data read from the file. "
+                "The app automatically strips report title rows and finds the real column header."
+            )
             st.dataframe(source_df.head(20), use_container_width=True)
-            st.caption(f"{len(source_df)} rows, {len(source_df.columns)} columns")
+            if len(source_df) > 20:
+                st.caption(f"Showing first 20 of {len(source_df)} rows.")
 
     if output_df is not None and not output_df.empty:
         all_output_dfs.append(output_df)
 
 # ---------------------------------------------------------------------------
-# Per-file summary table
+# File summary table
 # ---------------------------------------------------------------------------
 
-st.subheader(f"Files Processed: {len(uploaded_files)}")
-
+st.subheader("Files Processed")
+st.markdown(
+    "Summary of all uploaded files. "
+    "If a file shows **error** or **0 rows**, check the Warnings section below."
+)
 summary_data = {
-    "File": [s[0] for s in file_summaries],
+    "File":            [s[0] for s in file_summaries],
     "Detected Format": [s[1] for s in file_summaries],
-    "Rows": [s[2] for s in file_summaries],
+    "Rows Converted":  [s[2] for s in file_summaries],
 }
 st.dataframe(pd.DataFrame(summary_data), use_container_width=True, hide_index=True)
 
 # ---------------------------------------------------------------------------
-# Combine all output rows
+# Stop early with warnings if no output produced
 # ---------------------------------------------------------------------------
 
 if not all_output_dfs:
     st.divider()
-    st.subheader("Warnings")
+    st.subheader("⚠️ Warnings")
     for w in all_warnings:
         st.warning(w)
-    st.error("No rows produced from any uploaded file.")
+    st.error(
+        "No rows were produced from any uploaded file. "
+        "Review the warnings above and check that you uploaded a supported file format."
+    )
     st.stop()
 
 combined_df = pd.concat(all_output_dfs, ignore_index=True)
 
 # ---------------------------------------------------------------------------
-# Validation summary
+# Step 3 — Validation summary
 # ---------------------------------------------------------------------------
 
 val_warnings = validate_output(combined_df)
 all_warnings += val_warnings
 
 st.divider()
-st.subheader("Validation Summary")
+st.subheader("Step 3 — Validation Summary")
+st.markdown(
+    "The app checks the converted data for common issues before writing the output file. "
+    "Warnings do **not** stop the download — review them and correct the source data if needed."
+)
 
 if not all_warnings:
-    st.success("No validation issues found.")
+    st.success("✅ No validation issues found. Data looks clean.")
 else:
+    st.markdown(f"**{len(all_warnings)} issue(s) found:**")
     for w in all_warnings:
         st.warning(w)
 
 # ---------------------------------------------------------------------------
-# Combined output preview
+# Step 4 — Transformed output preview
 # ---------------------------------------------------------------------------
 
 st.divider()
-st.subheader("Transformed Output Preview (All Files Combined)")
+st.subheader("Step 4 — Converted Output Preview")
+st.markdown(
+    "This is the data that will be written into the ArcGIS batch upload workbook. "
+    "Column names match the **Staff List** sheet in the ArcGIS template exactly. "
+    "Dates have been offset by the configured time offset hours."
+)
 
 preview_df = combined_df.copy()
 for col in ("unitshiftstart", "unitshiftend"):
@@ -282,18 +356,26 @@ for col in ("unitshiftstart", "unitshiftend"):
         )
 
 st.dataframe(preview_df, use_container_width=True)
-st.caption(f"{len(combined_df)} total rows from {len(all_output_dfs)} file(s) ready for upload.")
+st.caption(
+    f"**{len(combined_df)} total rows** from {len(all_output_dfs)} file(s) ready for upload."
+)
 
 # ---------------------------------------------------------------------------
-# Write to template and provide download
+# Step 5 — Download
 # ---------------------------------------------------------------------------
 
 st.divider()
+st.subheader("Step 5 — Download ArcGIS Upload Workbook")
+st.markdown(
+    "Click the button below to download the completed Excel workbook. "
+    "Open the downloaded file and import it into ArcGIS using the "
+    "Special Event Solution batch upload process."
+)
 
 if not template_exists:
     st.error(
-        "Cannot generate download — template not found at "
-        f"`{TEMPLATE_PATH}`. Place the file there and reload."
+        "Cannot generate download — ArcGIS template not found at "
+        f"`{TEMPLATE_PATH}`. Place the file in the `templates/` folder and restart the app."
     )
     st.stop()
 
@@ -306,11 +388,14 @@ except Exception as e:
     st.stop()
 
 st.download_button(
-    label="Download ArcGIS Upload Workbook",
+    label="⬇️ Download ArcGIS Upload Workbook",
     data=workbook_bytes,
     file_name=OUTPUT_FILENAME,
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     type="primary",
 )
 
-st.caption(f"Output file: `{OUTPUT_FILENAME}`")
+st.caption(
+    f"Downloaded file: `{OUTPUT_FILENAME}` — "
+    "contains all converted rows in the ArcGIS Staff List format."
+)
