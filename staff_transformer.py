@@ -1152,9 +1152,12 @@ def validate_output(df: pd.DataFrame, source_df: pd.DataFrame = None) -> list:
         issues.append(f"Missing required output columns: {missing_cols}")
 
     # Check 3: blank unitid
-    blank_unit = df["unitid"].apply(lambda v: not str(v).strip()).sum()
-    if blank_unit:
-        issues.append(f"{blank_unit} row(s) have blank unitid.")
+    blank_unit_rows = df.index[df["unitid"].apply(lambda v: not str(v).strip())].tolist()
+    if blank_unit_rows:
+        issues.append(
+            f"{len(blank_unit_rows)} row(s) have blank unitid. "
+            f"Row(s): {blank_unit_rows[:20]}"
+        )
 
     # Check 4: duplicate unitid values
     # Only check non-blank unitids -- blank unitid is already flagged above.
@@ -1166,23 +1169,31 @@ def validate_output(df: pd.DataFrame, source_df: pd.DataFrame = None) -> list:
     dup_count  = dup_mask.sum()
     dups       = non_blank[non_blank.duplicated()].unique().tolist()
     if dups:
+        dup_rows = uid_series[dup_mask].index.tolist()
         issues.append(
             f"⚠️ Duplicate unitid detected — {dup_count} row(s) share a unitid with another row. "
             f"ArcGIS may overwrite or reject duplicate units on import. "
-            f"Repeated unitid value(s): {dups[:10]}"
+            f"Repeated unitid value(s): {dups[:10]}. "
+            f"Row(s): {dup_rows[:20]}"
         )
 
     # Check 5: blank staffname
-    blank_name = df["staffname"].apply(lambda v: not str(v).strip()).sum()
-    if blank_name:
-        issues.append(f"{blank_name} row(s) have blank staffname.")
+    blank_name_rows = df.index[df["staffname"].apply(lambda v: not str(v).strip())].tolist()
+    if blank_name_rows:
+        issues.append(
+            f"{len(blank_name_rows)} row(s) have blank staffname. "
+            f"Row(s): {blank_name_rows[:20]}"
+        )
 
     # Check 6: blank shift datetimes
     for col in ("unitshiftstart", "unitshiftend"):
         if col in df.columns:
-            blank = df[col].apply(lambda v: not str(v).strip()).sum()
-            if blank:
-                issues.append(f"{blank} row(s) have blank {col}.")
+            blank_rows = df.index[df[col].apply(lambda v: not str(v).strip())].tolist()
+            if blank_rows:
+                issues.append(
+                    f"{len(blank_rows)} row(s) have blank {col}. "
+                    f"Row(s): {blank_rows[:20]}"
+                )
 
     # Check 7: staffrank values not in ArcGIS approved domain
     if "staffrank" in df.columns:
