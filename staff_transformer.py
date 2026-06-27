@@ -938,7 +938,7 @@ def transform_special_event_workup(
         ss_val = _get(df, row, "StaffStatus")
         out["staffstatus"] = default_staff_status if default_staff_status else ss_val
 
-        out["staffduty"] = _get(df, row, "StaffDuty")
+        out["staffduty"] = re.sub(r"\s*division\s*$", "", _get(df, row, "StaffDuty"), flags=re.IGNORECASE).strip()
 
         # staffagency: use sidebar value (default "HPD"); sidebar overrides source
         out["staffagency"] = default_staff_agency if default_staff_agency else _get(df, row, "StaffAgency")
@@ -1068,7 +1068,7 @@ def transform_current_staffing_report(
         out["staffskills"] = ""              # not available in staffing report
         out["staffpay"]    = ""              # not available in staffing report
         out["staffstatus"] = default_staff_status   # sidebar value applied to all rows
-        out["staffduty"]   = _get(df, row, "Division")
+        out["staffduty"]   = re.sub(r"\s*division\s*$", "", _get(df, row, "Division"), flags=re.IGNORECASE).strip()
         out["staffagency"] = default_staff_agency if default_staff_agency else "HPD"
 
         # unitshift: sidebar dropdown overrides all rows when selected;
